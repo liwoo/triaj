@@ -5,7 +5,7 @@
 
 ## The Problem
 
-Public institutions in the UK process tens of thousands of complaints every year. The Information Commissioner's Office (ICO) alone receives more than 7,000 complaints annually. Across local councils, NHS trusts, housing associations, ombudsman offices, and regulatory bodies, the total volume runs into the hundreds of thousands — each one representing a citizen who is frustrated, vulnerable, or failed by a system they depend on.
+Public institutions in the UK process tens of thousands of complaints every year. The Information Commissioner's Office (ICO) alone receives more than 7,000 complaints every month. Across local councils, NHS trusts, housing associations, ombudsman offices, and regulatory bodies, the total volume runs into the hundreds of thousands — each one representing a citizen who is frustrated, vulnerable, or failed by a system they depend on.
 
 Behind each complaint sits a caseworker. They read emails, dig through attachments, cross-reference prior correspondence, and make a judgement call: how urgent is this? Who does it affect? Does it meet the threshold for escalation? On a good morning, with a fresh mind and a manageable inbox, they do this well. By the afternoon of a heavy caseload day, the quality of those decisions degrades — not through negligence, but through the simple, well-documented reality of decision fatigue.
 
