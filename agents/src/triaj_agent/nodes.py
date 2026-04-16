@@ -167,32 +167,83 @@ def validate(state: CaseState) -> CaseState:
     }
 
 
+# ---------------------------------------------------------------------------
+# Decision nodes
+#
+# Every conditional edge in the graph is preceded by a decision node so the
+# decision itself is a first-class, observable step (visible in Studio traces,
+# replayable from state). The node records the decision in the trace; the
+# router that follows is a thin lookup of the underlying state field.
+# ---------------------------------------------------------------------------
+
+
+def classify_upload(state: CaseState) -> CaseState:
+    kind = state.get("kind") or "case"
+    return {
+        "trace": [
+            {
+                "node": "classify_upload",
+                "status": "ok",
+                "message": f"upload kind resolved as '{kind}'",
+            }
+        ]
+    }
+
+
+def classify_ingestion_path(state: CaseState) -> CaseState:
+    kind = state.get("kind") or "case"
+    path = "embedding (policy skips validation)" if kind == "policy" else "validate (case)"
+    return {
+        "trace": [
+            {
+                "node": "classify_ingestion_path",
+                "status": "ok",
+                "message": f"routing extracted content → {path}",
+            }
+        ]
+    }
+
+
+def triage_decision(state: CaseState) -> CaseState:
+    if state.get("is_processable"):
+        message = "content passed validation → continue to PII filter"
+    else:
+        message = f"quarantine: {state.get('quarantine_reason') or 'unspecified'}"
+    return {
+        "trace": [{"node": "triage_decision", "status": "ok", "message": message}]
+    }
+
+
+def enrichment_decision(state: CaseState) -> CaseState:
+    kind = state.get("kind") or "case"
+    message = (
+        "policy → persist without categorize"
+        if kind == "policy"
+        else "case → categorize against policy vectors before persist"
+    )
+    return {
+        "trace": [{"node": "enrichment_decision", "status": "ok", "message": message}]
+    }
+
+
+# ---------------------------------------------------------------------------
+# Routers (paired with the decision nodes above)
+# ---------------------------------------------------------------------------
+
+
 def route_by_upload_kind(state: CaseState) -> Literal["case", "policy"]:
-    """Top-of-graph branch on the `kind` flag.
-
-    Surfaces the case-vs-policy distinction as the first decision in the graph
-    so it is visible in Studio traces. Both branches currently lead to extract;
-    the post-extract routers carry the actual divergence. Missing flag is
-    treated as "case" — tighten this to raise once upstream callers always set
-    `kind` explicitly.
-    """
-
     return "policy" if state.get("kind") == "policy" else "case"
 
 
 def route_after_extract(state: CaseState) -> Literal["validate", "embedding"]:
-    """Policy folders skip validation/PII/categorize; cases take the full path."""
-
     return "embedding" if state.get("kind") == "policy" else "validate"
 
 
-def route_after_validate(state: CaseState) -> Literal["pii_filter", "quarantine"]:
+def route_after_triage(state: CaseState) -> Literal["pii_filter", "quarantine"]:
     return "pii_filter" if state.get("is_processable") else "quarantine"
 
 
-def route_after_embedding(state: CaseState) -> Literal["categorize", "persist"]:
-    """Policies persist straight after embedding; cases go through categorize first."""
-
+def route_after_enrichment(state: CaseState) -> Literal["categorize", "persist"]:
     return "persist" if state.get("kind") == "policy" else "categorize"
 
 

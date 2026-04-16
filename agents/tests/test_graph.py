@@ -64,10 +64,14 @@ def test_processable_folder_runs_full_pipeline(tmp_path: Path) -> None:
     assert result["category"] is None  # categorize is still a stub
     trace_nodes = [t["node"] for t in result["trace"]]
     assert trace_nodes == [
+        "classify_upload",
         "extract",
+        "classify_ingestion_path",
         "validate",
+        "triage_decision",
         "pii_filter",
         "embedding",
+        "enrichment_decision",
         "categorize",
         "persist",
     ]
@@ -128,7 +132,14 @@ def test_policy_folder_skips_to_embed_and_persist(tmp_path: Path) -> None:
     )
 
     trace_nodes = [t["node"] for t in result["trace"]]
-    assert trace_nodes == ["extract", "embedding", "persist"]
+    assert trace_nodes == [
+        "classify_upload",
+        "extract",
+        "classify_ingestion_path",
+        "embedding",
+        "enrichment_decision",
+        "persist",
+    ]
     assert result["embedding"] == [0.01] * 8
 
     assert supabase_stub.get_writes() == []  # nothing in cases table

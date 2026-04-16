@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, FolderUp, Loader2, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FolderUp, Loader2, Upload } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCases } from "@/store/cases";
 import { useCreateDialog } from "@/store/create-dialog";
+import { supabaseEnabled } from "@/lib/supabase/client";
+import { uploadQuarantineFolder } from "@/lib/storage";
 import type { EnrichedCase } from "@/types";
 
 export function CreateCaseDialog() {
@@ -29,6 +31,7 @@ export function CreateCaseDialog() {
   const [applicantName, setApplicantName] = useState("");
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const reset = () => {
     setFiles([]);
@@ -36,6 +39,7 @@ export function CreateCaseDialog() {
     setApplicantName("");
     setResult(null);
     setProcessing(false);
+    setUploadError(null);
   };
 
   const onOpenChange = (v: boolean) => {
@@ -52,18 +56,53 @@ export function CreateCaseDialog() {
   const onSubmit = async () => {
     if (files.length === 0 || !applicantName.trim()) return;
     setProcessing(true);
-    await new Promise((r) => setTimeout(r, 900));
+    setUploadError(null);
 
     const today = new Date().toISOString().slice(0, 10);
     const id = `CASE-${today.slice(0, 4)}-${String(Math.floor(Math.random() * 1000)).padStart(3, "0")}99`;
+    const caseType = "benefit_review";
+    const applicant = applicantName.trim();
+    const reference = caseRef.trim() || `REF-${Math.floor(Math.random() * 90000 + 10000)}`;
+
+    if (supabaseEnabled()) {
+      try {
+        const outcome = await uploadQuarantineFolder({
+          caseId: id,
+          applicantName: applicant,
+          caseType,
+          files,
+          metadata: {
+            case_id: id,
+            case_type: caseType,
+            applicant: { name: applicant, reference },
+            created_date: today,
+            file_count: files.length,
+            source: "triaj-ui:create-dialog",
+          },
+        });
+        if (outcome.failed.length > 0) {
+          setUploadError(
+            `${outcome.failed.length} file${outcome.failed.length === 1 ? "" : "s"} failed to upload: ${outcome.failed.map((f) => `${f.name} (${f.message})`).join("; ")}`,
+          );
+          setProcessing(false);
+          return;
+        }
+      } catch (err) {
+        setUploadError(
+          err instanceof Error ? err.message : "Upload failed — please try again.",
+        );
+        setProcessing(false);
+        return;
+      }
+    }
 
     const newCase: EnrichedCase = {
       case_id: id,
-      case_type: "benefit_review",
+      case_type: caseType,
       status: "case_created",
       applicant: {
-        name: applicantName.trim(),
-        reference: caseRef.trim() || `REF-${Math.floor(Math.random() * 90000 + 10000)}`,
+        name: applicant,
+        reference,
         date_of_birth: null,
       },
       assigned_to: "unassigned",
@@ -123,6 +162,15 @@ export function CreateCaseDialog() {
           </div>
         ) : (
           <div className="space-y-4">
+            {uploadError && (
+              <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <div className="font-medium">Upload failed</div>
+                  <div className="mt-0.5 text-xs">{uploadError}</div>
+                </div>
+              </div>
+            )}
             <div>
               <Label className="mb-1.5 block">Complaint folder</Label>
               <div
