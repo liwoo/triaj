@@ -144,6 +144,71 @@ function toEnriched(row: CaseRow): EnrichedCase {
   };
 }
 
+export async function approveCaseInSupabase(caseId: string): Promise<void> {
+  const supabase = createClient();
+  const nowIso = new Date().toISOString();
+  const today = nowIso.slice(0, 10);
+
+  const { data, error } = await supabase
+    .from("cases")
+    .update({ ai_status: "published", last_updated: nowIso })
+    .eq("case_id", caseId)
+    .select("id")
+    .single();
+
+  if (error) throw new Error(`approve failed: ${error.message}`);
+
+  const { error: timelineErr } = await supabase.from("case_timeline").insert({
+    case_id: data.id,
+    event_date: today,
+    event: "approved",
+    note: "Human reviewer approved the AI triage decision.",
+    actor: "human_reviewer",
+  });
+  if (timelineErr) {
+    console.warn(
+      "[cases-api] approve succeeded but timeline insert failed:",
+      timelineErr,
+    );
+  }
+}
+
+export async function rejectCaseInSupabase(
+  caseId: string,
+  reason: string,
+): Promise<void> {
+  const supabase = createClient();
+  const nowIso = new Date().toISOString();
+  const today = nowIso.slice(0, 10);
+
+  const { data, error } = await supabase
+    .from("cases")
+    .update({
+      ai_status: "rejected",
+      rejection_reason: reason,
+      last_updated: nowIso,
+    })
+    .eq("case_id", caseId)
+    .select("id")
+    .single();
+
+  if (error) throw new Error(`reject failed: ${error.message}`);
+
+  const { error: timelineErr } = await supabase.from("case_timeline").insert({
+    case_id: data.id,
+    event_date: today,
+    event: "rejected",
+    note: reason,
+    actor: "human_reviewer",
+  });
+  if (timelineErr) {
+    console.warn(
+      "[cases-api] reject succeeded but timeline insert failed:",
+      timelineErr,
+    );
+  }
+}
+
 export async function createCaseInSupabase(params: {
   caseId: string;
   caseType: string;

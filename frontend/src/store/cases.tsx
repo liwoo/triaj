@@ -11,7 +11,11 @@ import {
 } from "react";
 import type { EnrichedCase } from "@/types";
 import { QUARANTINED_CASES, buildEnrichedCases } from "@/data/cases";
-import { fetchCasesFromSupabase } from "@/lib/cases-api";
+import {
+  approveCaseInSupabase,
+  fetchCasesFromSupabase,
+  rejectCaseInSupabase,
+} from "@/lib/cases-api";
 import { supabaseEnabled } from "@/lib/supabase/client";
 
 type CasesSource = "fixtures" | "supabase";
@@ -20,8 +24,8 @@ type CasesContextValue = {
   pending: EnrichedCase[];
   approved: EnrichedCase[];
   quarantined: EnrichedCase[];
-  approve: (id: string) => void;
-  reject: (id: string, reason: string) => void;
+  approve: (id: string) => Promise<void>;
+  reject: (id: string, reason: string) => Promise<void>;
   reinstate: (id: string) => void;
   addCase: (c: EnrichedCase) => void;
   refresh: () => Promise<void>;
@@ -66,17 +70,34 @@ export function CasesProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
-  const approve = useCallback((id: string) => {
-    setCases((prev) =>
-      prev.map((c) => (c.case_id === id ? { ...c, ai_status: "published" } : c)),
-    );
-  }, []);
-
-  const reject = useCallback((id: string, reason: string) => {
+  const approve = useCallback(async (id: string) => {
+    if (supabaseEnabled()) {
+      await approveCaseInSupabase(id);
+    }
+    const nowIso = new Date().toISOString();
     setCases((prev) =>
       prev.map((c) =>
         c.case_id === id
-          ? { ...c, ai_status: "rejected", rejection_reason: reason }
+          ? { ...c, ai_status: "published", last_updated: nowIso }
+          : c,
+      ),
+    );
+  }, []);
+
+  const reject = useCallback(async (id: string, reason: string) => {
+    if (supabaseEnabled()) {
+      await rejectCaseInSupabase(id, reason);
+    }
+    const nowIso = new Date().toISOString();
+    setCases((prev) =>
+      prev.map((c) =>
+        c.case_id === id
+          ? {
+              ...c,
+              ai_status: "rejected",
+              rejection_reason: reason,
+              last_updated: nowIso,
+            }
           : c,
       ),
     );

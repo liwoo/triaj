@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -15,18 +16,36 @@ import { Textarea } from "@/components/ui/textarea";
 interface RejectDialogProps {
   caseId: string | null;
   onClose: () => void;
-  onConfirm: (id: string, reason: string) => void;
+  onConfirm: (id: string, reason: string) => Promise<void> | void;
 }
 
 export function RejectDialog({ caseId, onClose, onConfirm }: RejectDialogProps) {
   const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!caseId) setReason("");
+    if (!caseId) {
+      setReason("");
+      setSubmitting(false);
+      setError(null);
+    }
   }, [caseId]);
 
+  const handleConfirm = async () => {
+    if (!caseId || !reason.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onConfirm(caseId, reason.trim());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Reject failed — try again.");
+      setSubmitting(false);
+    }
+  };
+
   return (
-    <Dialog open={!!caseId} onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={!!caseId} onOpenChange={(v) => !v && !submitting && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Reject triage decision</DialogTitle>
@@ -44,19 +63,32 @@ export function RejectDialog({ caseId, onClose, onConfirm }: RejectDialogProps) 
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="e.g. Framework section 1.2 does not apply here because the applicant is not in a care setting…"
+            disabled={submitting}
           />
+          {error && (
+            <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2.5 text-xs text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <div>{error}</div>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
           <Button
             variant="destructive"
-            disabled={!reason.trim()}
-            onClick={() => caseId && onConfirm(caseId, reason.trim())}
+            disabled={!reason.trim() || submitting}
+            onClick={handleConfirm}
           >
-            Reject
+            {submitting ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Rejecting…
+              </>
+            ) : (
+              "Reject"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -14,10 +14,22 @@ export function CasesPendingPage() {
   const { pending, approve, reject } = useCases();
   const [selected, setSelected] = useState<EnrichedCase | null>(null);
   const [rejectId, setRejectId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const handleApprove = async (id: string) => {
+    setActionError(null);
+    try {
+      await approve(id);
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Approve failed — please retry.",
+      );
+    }
+  };
 
   const columns = buildCaseColumns({
     onView: (c) => setSelected(c),
-    onApprove: (c) => approve(c.case_id),
+    onApprove: (c) => void handleApprove(c.case_id),
     onReject: (c) => setRejectId(c.case_id),
   });
 
@@ -40,6 +52,12 @@ export function CasesPendingPage() {
         title="Pending review"
         description="AI-triaged cases awaiting human approval. Every decision is explainable and auditable."
       />
+
+      {actionError && (
+        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100">
+          {actionError}
+        </div>
+      )}
 
       <DataTable<EnrichedCase>
         data={pending}
@@ -71,8 +89,8 @@ export function CasesPendingPage() {
       <CaseDetailModal
         caseItem={selected}
         onClose={() => setSelected(null)}
-        onApprove={(id) => {
-          approve(id);
+        onApprove={async (id) => {
+          await handleApprove(id);
           setSelected(null);
         }}
         onReject={(id) => {
@@ -84,8 +102,8 @@ export function CasesPendingPage() {
       <RejectDialog
         caseId={rejectId}
         onClose={() => setRejectId(null)}
-        onConfirm={(id, reason) => {
-          reject(id, reason);
+        onConfirm={async (id, reason) => {
+          await reject(id, reason);
           setRejectId(null);
         }}
       />

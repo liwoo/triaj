@@ -24,7 +24,7 @@ import type { EnrichedCase } from "@/types";
 interface CaseDetailModalProps {
   caseItem: EnrichedCase | null;
   onClose: () => void;
-  onApprove?: (id: string) => void;
+  onApprove?: (id: string) => void | Promise<void>;
   onReject?: (id: string) => void;
   readOnly?: boolean;
 }
