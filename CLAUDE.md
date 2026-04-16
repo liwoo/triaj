@@ -10,9 +10,10 @@ Only the frontend UI shell has been scaffolded. Backend (ingestion, PII pipeline
 
 - `data/` — seed fixtures used by the frontend and (eventually) backend: `sample-cases.json`, `states.json` (workflow states + AI status definitions).
 - `frontend/` — Next.js 14 App Router + TypeScript + Tailwind UI shell.
-  - `app/` — routing only. Route segments import page components from `src/pages/`. The `(app)` route group shares a sidebar layout. Root redirect `/` → `/dashboard`.
-  - `src/pages/` — page-level React components (client components). These are imported by the thin `app/**/page.tsx` entry files.
+  - `app/` — routing only. Route segments import page components from `src/screens/`. The `(app)` route group shares a sidebar layout. Root redirect `/` → `/dashboard`.
+  - `src/screens/` — page-level React components (client components). These are imported by the thin `app/**/page.tsx` entry files.
   - `src/components/` — shared components. `Sidebar`, `Layout` (header), `DataTable` (TanStack Table v8 wrapper with search, column filters, sorting, pagination), `CaseDetailModal`, `RejectDialog`, `caseColumns` (reusable column builder).
+  - `src/lib/seo.ts` — single source of truth for `siteUrl`, `siteName`, tagline, description, keywords. `siteUrl` reads `NEXT_PUBLIC_SITE_URL` with a localhost fallback — set this env var in every non-local deploy or canonical URLs, OG tags, sitemap, and robots will point at localhost.
   - `src/components/ui/` — real **shadcn/ui** components (New York style, slate base, CSS variables). Configured via `components.json`. Installed: button, badge, input, textarea, select, dialog, tooltip, hover-card, dropdown-menu, table, scroll-area, separator, card, label. Customise by editing the files directly — that's the shadcn model.
   - `src/store/cases.tsx` — in-memory `CasesProvider` context holding pending / approved / quarantined cases plus `approve` / `reject` / `reinstate` / `addCase` actions. **Not persisted** — state resets on reload.
   - `src/store/create-dialog.tsx` — tiny `CreateDialogProvider` context that controls the global Create Case modal. The sidebar's "Create" button calls `setOpen(true)`; `<CreateCaseDialog />` is mounted once in `app/(app)/layout.tsx` and listens for that signal. There is intentionally no `/create` route — creation is modal-only.
@@ -32,6 +33,14 @@ npx shadcn@latest add <name>    # add more shadcn components
 ```
 
 **Known gotcha**: `npx shadcn@latest add` can fall into an interactive "create a new Next.js project" prompt if it fails to detect the existing project. If that happens, cancel the CLI and write the component file manually from `ui.shadcn.com` — the registry output is plain copy-paste, no build magic.
+
+## SEO
+
+- Root `app/layout.tsx` sets the base metadata (title template `%s · Triaj`, OG, Twitter, robots, icons, keywords, `metadataBase`) and injects a single `SoftwareApplication` JSON-LD script.
+- Each route segment (`app/(app)/**/page.tsx`) exports its own `metadata` with a concrete title, description, canonical URL, and an explicit `robots: { index: false, follow: false }` — **app surfaces are never indexed**, only the root is indexable. Keep this pattern: if you add a new app route, set `noindex` on it unless it is genuinely public marketing copy.
+- Dynamic image routes live at `app/icon.tsx` (32×32), `app/apple-icon.tsx` (180×180), `app/opengraph-image.tsx` (1200×630). All three use `next/og` `ImageResponse` on the edge runtime — they render server-side to PNG on first request. Don't import lucide-react into these — `ImageResponse` uses a minimal satori renderer, not full React/CSS.
+- `app/robots.ts` and `app/sitemap.ts` generate `robots.txt` and `sitemap.xml` at request time from `siteUrl`. Operators who deploy to a public domain should set `NEXT_PUBLIC_SITE_URL` so crawlers see the real host.
+- `viewport` is exported separately from metadata (Next.js 14 requirement) and sets theme-color for both colour schemes so the browser chrome matches the mode toggle.
 
 ## Frontend Architecture Notes
 
