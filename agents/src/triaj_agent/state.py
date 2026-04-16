@@ -27,8 +27,8 @@ class CaseState(TypedDict, total=False):
     """State threaded through the ingestion graph.
 
     Invoked with `case_id`, `bucket_url`, and `kind` ("case" or "policy").
-    - kind="case"   → extract → validate → (quarantine | pii_filter → embedding → categorize → persist)
-    - kind="policy" → extract → embedding → persist
+    - kind="case"   → extract → validate → (quarantine | pii_filter → categorize → persist)
+    - kind="policy" → extract → persist
 
     Quarantine and persist both write to Supabase (cases table for case kind,
     policies table for policy kind).
@@ -50,12 +50,10 @@ class CaseState(TypedDict, total=False):
     # ---- pii filter ----
     anonymised_content: str
 
-    # ---- embedding ----
-    embedding: list[float]
-
     # ---- categorize ----
     category: str | None
     category_confidence: float | None
+    category_rationale: str | None
 
     # ---- audit ----
     trace: Annotated[list[TraceEvent], add]

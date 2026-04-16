@@ -131,6 +131,50 @@ function toEnriched(row: CaseRow): EnrichedCase {
   };
 }
 
+export async function createCaseInSupabase(params: {
+  caseId: string;
+  caseType: string;
+  applicantName: string;
+  applicantReference: string;
+  createdDate: string;
+  uploadedFolder?: string;
+}): Promise<void> {
+  const supabase = createClient();
+
+  const { data: applicant, error: applicantErr } = await supabase
+    .from("applicants")
+    .insert({
+      name: params.applicantName,
+      reference: params.applicantReference,
+      date_of_birth: null,
+    })
+    .select("id")
+    .single();
+
+  if (applicantErr) {
+    throw new Error(`applicant insert failed: ${applicantErr.message}`);
+  }
+
+  const notes = params.uploadedFolder
+    ? `Uploaded to uploads-quarantine/${params.uploadedFolder}`
+    : "";
+
+  const { error: caseErr } = await supabase.from("cases").insert({
+    case_id: params.caseId,
+    case_type: params.caseType,
+    status: "processing",
+    state: "processing",
+    applicant_id: applicant.id,
+    assigned_to: "unassigned",
+    case_notes: notes,
+    created_date: params.createdDate,
+  });
+
+  if (caseErr) {
+    throw new Error(`case insert failed: ${caseErr.message}`);
+  }
+}
+
 export async function fetchCasesFromSupabase(): Promise<EnrichedCase[]> {
   const supabase = createClient();
   const { data, error } = await supabase

@@ -1,148 +1,189 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { FileText, Upload, Trash2, FileUp } from "lucide-react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
-import { badgeColor, cn, formatDate } from "@/lib/utils";
+import { supabaseEnabled } from "@/lib/supabase/client";
+import {
+  fetchPoliciesFromSupabase,
+  formatFileSize,
+  type PolicyDocument,
+} from "@/lib/policies-api";
+import { formatDate } from "@/lib/utils";
 
-interface Policy {
-  id: string;
-  name: string;
-  version: string;
-  uploaded: string;
-  size: string;
-  status: "active" | "draft";
+type State =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; policies: PolicyDocument[] }
+  | { status: "error"; message: string };
+
+function prettyName(path: string) {
+  const last = path.split("/").pop() ?? path;
+  return last.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ");
 }
 
-const SEED: Policy[] = [
-  {
-    id: "POL-001",
-    name: "Complaints Prioritisation Framework 2026",
-    version: "v2.3",
-    uploaded: "2026-01-12",
-    size: "214 KB",
-    status: "active",
-  },
-  {
-    id: "POL-002",
-    name: "Vulnerability Escalation Policy",
-    version: "v1.4",
-    uploaded: "2025-11-03",
-    size: "98 KB",
-    status: "active",
-  },
-  {
-    id: "POL-003",
-    name: "Benefits Review — Non-compliance (POL-BR-003)",
-    version: "v3.1",
-    uploaded: "2026-02-20",
-    size: "142 KB",
-    status: "active",
-  },
-];
+function extension(path: string) {
+  const m = path.match(/\.([^.]+)$/);
+  return m ? m[1].toUpperCase() : "FILE";
+}
+
+// Dummy handlers — uploads/deletes are done directly in the Supabase dashboard.
+// Buttons are present for visual completeness and to mark where CRUD would live.
+const noop = () => {};
 
 export function PoliciesPage() {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [policies, setPolicies] = useState<Policy[]>(SEED);
+  const [state, setState] = useState<State>({ status: "idle" });
 
-  const onAdd = (file: File) => {
-    const p: Policy = {
-      id: `POL-${String(policies.length + 1).padStart(3, "0")}`,
-      name: file.name.replace(/\.[^.]+$/, ""),
-      version: "v1.0",
-      uploaded: new Date().toISOString().slice(0, 10),
-      size: `${Math.round(file.size / 1024)} KB`,
-      status: "draft",
-    };
-    setPolicies((prev) => [p, ...prev]);
-  };
-
-  const onRemove = (id: string) => {
-    setPolicies((prev) => prev.filter((p) => p.id !== id));
-  };
+  useEffect(() => {
+    if (!supabaseEnabled()) {
+      setState({
+        status: "error",
+        message:
+          "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to show policy documents.",
+      });
+      return;
+    }
+    setState({ status: "loading" });
+    fetchPoliciesFromSupabase()
+      .then((policies) => setState({ status: "ready", policies }))
+      .catch((err: unknown) => {
+        const message =
+          err instanceof Error ? err.message : "Failed to load policies.";
+        setState({ status: "error", message });
+      });
+  }, []);
 
   return (
     <div>
       <PageHeader
+        caption="Configuration"
         title="Policies"
-        description="Institution prioritisation frameworks. Upload PDFs, guidance docs, or internal handbooks — their logic is extracted and codified into the prompt bank."
-        actions={
-          <Button onClick={() => inputRef.current?.click()}>
-            <Upload className="h-3.5 w-3.5" /> Upload policy
-          </Button>
-        }
+        description="Institution prioritisation frameworks, guidance documents, and handbooks. Triage decisions must be reproducible against the framework version in force at the time — these documents are the canonical record."
+        actions={<Button onClick={noop}>Upload policy</Button>}
       />
 
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".pdf,.doc,.docx,.md,.txt"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) onAdd(f);
-          e.currentTarget.value = "";
-        }}
-      />
+      {state.status === "loading" && (
+        <p className="text-govuk-dark-grey dark:text-govuk-mid-grey">
+          Loading policy documents…
+        </p>
+      )}
 
-      <Card>
-        {policies.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16">
-            <FileUp className="h-8 w-8 text-muted-foreground/50" />
-            <div className="mt-2 text-sm text-muted-foreground">
-              No policies uploaded yet.
-            </div>
-          </div>
-        ) : (
-          <ul className="divide-y">
-            {policies.map((p) => (
-              <li
-                key={p.id}
-                className="flex items-center gap-4 px-5 py-3.5 hover:bg-accent/40"
-              >
-                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                  <FileText className="h-4 w-4" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <div className="text-sm font-medium">{p.name}</div>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        badgeColor(p.status === "active" ? "emerald" : "amber"),
-                        "border",
-                      )}
-                    >
-                      {p.status}
-                    </Badge>
-                  </div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    {p.id} · {p.version} · {p.size} · uploaded{" "}
-                    {formatDate(p.uploaded)}
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => onRemove(p.id)}
-                  title="Remove"
+      {state.status === "error" && (
+        <div className="border-l-[5px] border-govuk-red bg-govuk-white p-4 dark:bg-govuk-black">
+          <p className="text-base font-bold text-govuk-red">
+            There is a problem
+          </p>
+          <p className="mt-1 text-sm text-govuk-black dark:text-govuk-white">
+            {state.message}
+          </p>
+        </div>
+      )}
+
+      {state.status === "ready" && state.policies.length === 0 && (
+        <div className="border-l-[10px] border-govuk-blue bg-govuk-light-grey p-4 dark:bg-[#1a1a1a]">
+          <p className="text-base text-govuk-black dark:text-govuk-white">
+            No policy documents have been uploaded to the{" "}
+            <code className="bg-govuk-white px-1 dark:bg-govuk-black">
+              policy-documents
+            </code>{" "}
+            bucket yet.
+          </p>
+        </div>
+      )}
+
+      {state.status === "ready" && state.policies.length > 0 && (
+        <>
+          <table className="w-full border-collapse text-left">
+            <caption className="sr-only">
+              Policy documents available in the policy-documents Supabase bucket
+            </caption>
+            <thead>
+              <tr className="border-b-[1px] border-govuk-mid-grey">
+                <th
+                  scope="col"
+                  className="whitespace-nowrap px-4 py-3 align-bottom text-sm font-bold text-govuk-black dark:text-govuk-white"
                 >
-                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+                  Document
+                </th>
+                <th
+                  scope="col"
+                  className="whitespace-nowrap px-4 py-3 align-bottom text-sm font-bold text-govuk-black dark:text-govuk-white"
+                >
+                  Type
+                </th>
+                <th
+                  scope="col"
+                  className="whitespace-nowrap px-4 py-3 align-bottom text-sm font-bold text-govuk-black dark:text-govuk-white"
+                >
+                  Size
+                </th>
+                <th
+                  scope="col"
+                  className="whitespace-nowrap px-4 py-3 align-bottom text-sm font-bold text-govuk-black dark:text-govuk-white"
+                >
+                  Last updated
+                </th>
+                <th
+                  scope="col"
+                  className="whitespace-nowrap px-4 py-3 align-bottom text-right text-sm font-bold text-govuk-black dark:text-govuk-white"
+                >
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {state.policies.map((p) => (
+                <tr
+                  key={p.path}
+                  className="border-b-[1px] border-govuk-mid-grey align-middle"
+                >
+                  <td className="px-4 py-3 text-sm">
+                    <a
+                      href={p.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-bold text-govuk-blue underline decoration-1 underline-offset-[0.1em] hover:decoration-[3px] dark:text-govuk-light-blue"
+                    >
+                      {prettyName(p.path)}
+                    </a>
+                    <div className="mt-0.5 text-xs text-govuk-dark-grey dark:text-govuk-mid-grey">
+                      {p.path}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-govuk-black dark:text-govuk-white">
+                    {extension(p.path)}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-govuk-black dark:text-govuk-white">
+                    {formatFileSize(p.size)}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-govuk-black dark:text-govuk-white">
+                    {formatDate(p.updatedAt ?? p.createdAt)}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="outline" onClick={noop}>
+                        Replace
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={noop}>
+                        Remove
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
 
-      <p className="mt-4 text-xs text-muted-foreground">
-        Every framework change is versioned and attributable in the prompt bank.
-        Past triage decisions remain reproducible against the framework version
-        in effect at the time.
-      </p>
+          <p className="mt-6 text-sm text-govuk-dark-grey dark:text-govuk-mid-grey">
+            {state.policies.length} document
+            {state.policies.length === 1 ? "" : "s"} · Source: Supabase bucket{" "}
+            <code className="bg-govuk-light-grey px-1 dark:bg-[#2a2a2a]">
+              policy-documents
+            </code>
+            .
+          </p>
+        </>
+      )}
     </div>
   );
 }

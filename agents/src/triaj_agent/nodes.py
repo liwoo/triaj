@@ -12,9 +12,14 @@ Supabase client).
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
+
+import anthropic
+from langgraph.types import Command
+from pydantic import BaseModel, Field
 
 from triaj_agent import supabase_stub
 from triaj_agent.state import CaseState, ParsedDocument
@@ -170,10 +175,12 @@ def validate(state: CaseState) -> CaseState:
 # ---------------------------------------------------------------------------
 # Decision nodes
 #
-# Every conditional edge in the graph is preceded by a decision node so the
-# decision itself is a first-class, observable step (visible in Studio traces,
-# replayable from state). The node records the decision in the trace; the
-# router that follows is a thin lookup of the underlying state field.
+# Every real branch in the graph is a node that returns Command[Literal[...]].
+# The Command bundles the state update (trace event) and the `goto` that
+# selects the next node, so the decision, its rationale, and the route all
+# live in one function — no paired router or add_conditional_edges.
+# classify_upload is a plain node because START → classify_upload → extract
+# doesn't actually branch; it only records the kind in the trace.
 # ---------------------------------------------------------------------------
 
 
@@ -190,61 +197,39 @@ def classify_upload(state: CaseState) -> CaseState:
     }
 
 
-def classify_ingestion_path(state: CaseState) -> CaseState:
+def classify_ingestion_path(
+    state: CaseState,
+) -> Command[Literal["validate", "persist"]]:
     kind = state.get("kind") or "case"
-    path = "embedding (policy skips validation)" if kind == "policy" else "validate (case)"
-    return {
-        "trace": [
-            {
-                "node": "classify_ingestion_path",
-                "status": "ok",
-                "message": f"routing extracted content → {path}",
-            }
-        ]
-    }
+    if kind == "policy":
+        goto: Literal["validate", "persist"] = "persist"
+        message = "policy → persist directly (no validation, PII, or categorize)"
+    else:
+        goto = "validate"
+        message = "case → full pipeline starting at validate"
+    return Command(
+        update={
+            "trace": [
+                {"node": "classify_ingestion_path", "status": "ok", "message": message}
+            ]
+        },
+        goto=goto,
+    )
 
 
-def triage_decision(state: CaseState) -> CaseState:
+def triage_decision(
+    state: CaseState,
+) -> Command[Literal["pii_filter", "quarantine"]]:
     if state.get("is_processable"):
+        goto: Literal["pii_filter", "quarantine"] = "pii_filter"
         message = "content passed validation → continue to PII filter"
     else:
+        goto = "quarantine"
         message = f"quarantine: {state.get('quarantine_reason') or 'unspecified'}"
-    return {
-        "trace": [{"node": "triage_decision", "status": "ok", "message": message}]
-    }
-
-
-def enrichment_decision(state: CaseState) -> CaseState:
-    kind = state.get("kind") or "case"
-    message = (
-        "policy → persist without categorize"
-        if kind == "policy"
-        else "case → categorize against policy vectors before persist"
+    return Command(
+        update={"trace": [{"node": "triage_decision", "status": "ok", "message": message}]},
+        goto=goto,
     )
-    return {
-        "trace": [{"node": "enrichment_decision", "status": "ok", "message": message}]
-    }
-
-
-# ---------------------------------------------------------------------------
-# Routers (paired with the decision nodes above)
-# ---------------------------------------------------------------------------
-
-
-def route_by_upload_kind(state: CaseState) -> Literal["case", "policy"]:
-    return "policy" if state.get("kind") == "policy" else "case"
-
-
-def route_after_extract(state: CaseState) -> Literal["validate", "embedding"]:
-    return "embedding" if state.get("kind") == "policy" else "validate"
-
-
-def route_after_triage(state: CaseState) -> Literal["pii_filter", "quarantine"]:
-    return "pii_filter" if state.get("is_processable") else "quarantine"
-
-
-def route_after_enrichment(state: CaseState) -> Literal["categorize", "persist"]:
-    return "persist" if state.get("kind") == "policy" else "categorize"
 
 
 # ---------------------------------------------------------------------------
@@ -296,60 +281,100 @@ def pii_filter(state: CaseState) -> CaseState:
 
 
 # ---------------------------------------------------------------------------
-# Embedding
+# Categorize (Claude-powered)
+#
+# Claude does its own retrieval inside the prompt — we pass every ingested
+# policy as context and it picks the best match. No embedding/pgvector step.
+# The policy block is stable across cases so we cache it via prompt caching
+# (~90% savings on input tokens after the first warm request).
 # ---------------------------------------------------------------------------
 
 
-def _embedding_model():
-    from langchain_openai import OpenAIEmbeddings
-
-    return OpenAIEmbeddings(model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"))
-
-
-def embedding(state: CaseState) -> CaseState:
-    # Policy branch skips pii_filter, so fall back to raw_content.
-    text = state.get("anonymised_content") or state.get("raw_content") or ""
-    try:
-        vec = _embedding_model().embed_query(text)
-    except ImportError:
-        return {
-            "embedding": [],
-            "trace": [
-                {
-                    "node": "embedding",
-                    "status": "skipped",
-                    "message": "langchain-openai not installed",
-                }
-            ],
-        }
-    return {
-        "embedding": vec,
-        "trace": [{"node": "embedding", "status": "ok", "message": f"dim={len(vec)}"}],
-    }
+class _Categorization(BaseModel):
+    policy_id: str = Field(
+        description="ID of the best-matching policy, or 'unclassified' if no policy fits."
+    )
+    confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Confidence from 0.0 (no match) to 1.0 (perfect match).",
+    )
+    rationale: str = Field(
+        description="Short explanation that quotes the matched policy where possible."
+    )
 
 
-# ---------------------------------------------------------------------------
-# Categorize (stub — policy vectors TBD)
-# ---------------------------------------------------------------------------
+@lru_cache(maxsize=1)
+def _anthropic_client() -> anthropic.Anthropic:
+    return anthropic.Anthropic()
+
+
+_CATEGORIZE_MODEL = os.getenv("TRIAGE_MODEL", "claude-opus-4-6")
+
+
+def _policy_system_prompt(policies: list[dict]) -> str:
+    policy_block = "\n\n---\n\n".join(
+        f"[policy_id: {p.get('policy_id')}]\n{p.get('raw_content') or ''}"
+        for p in policies
+    )
+    return (
+        "You are the Triaj categorisation node. Classify the anonymised "
+        "complaint against the institution's policies below. Pick the best-matching "
+        "policy_id, a confidence score from 0.0 to 1.0, and a short rationale that "
+        "quotes the relevant text where possible. If nothing matches well, return "
+        "policy_id='unclassified' with low confidence.\n\n"
+        "--- Policies ---\n"
+        f"{policy_block}"
+    )
 
 
 def categorize(state: CaseState) -> CaseState:
-    """Match the case embedding against the institution's policy vectors.
+    policies = supabase_stub.get_policy_writes()
+    anonymised = (state.get("anonymised_content") or "").strip()
 
-    Real implementation: nearest-neighbour query against a pgvector table
-    populated from the framework prompt bank, returning the best-matching
-    case_type + similarity. Stubbed for now — categorize returns null until
-    the policy vector index exists.
-    """
+    if not policies:
+        return {
+            "category": None,
+            "category_confidence": None,
+            "category_rationale": None,
+            "trace": [
+                {
+                    "node": "categorize",
+                    "status": "skipped",
+                    "message": "no policies ingested — nothing to match against",
+                }
+            ],
+        }
+
+    response = _anthropic_client().messages.parse(
+        model=_CATEGORIZE_MODEL,
+        max_tokens=1024,
+        system=[
+            {
+                "type": "text",
+                "text": _policy_system_prompt(policies),
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        messages=[{"role": "user", "content": anonymised}],
+        output_format=_Categorization,
+    )
+
+    result: _Categorization = response.parsed_output
+    category = None if result.policy_id == "unclassified" else result.policy_id
 
     return {
-        "category": None,
-        "category_confidence": None,
+        "category": category,
+        "category_confidence": result.confidence,
+        "category_rationale": result.rationale,
         "trace": [
             {
                 "node": "categorize",
-                "status": "skipped",
-                "message": "policy vector index not loaded",
+                "status": "ok",
+                "message": (
+                    f"matched '{result.policy_id}' "
+                    f"(confidence={result.confidence:.2f}): {result.rationale}"
+                ),
             }
         ],
     }
@@ -365,10 +390,12 @@ def persist(state: CaseState) -> CaseState:
     documents = [d.source for d in (state.get("documents") or [])]
 
     if state.get("kind") == "policy":
+        # raw_content goes on the row so categorize can load it back from the
+        # policies table and present it to Claude as classification context.
         supabase_stub.update_policy(
             record_id,
             status="indexed",
-            embedding=state.get("embedding"),
+            raw_content=state.get("raw_content"),
             documents=documents,
         )
     else:
@@ -377,7 +404,7 @@ def persist(state: CaseState) -> CaseState:
             status="triaged",
             category=state.get("category"),
             category_confidence=state.get("category_confidence"),
-            embedding=state.get("embedding"),
+            category_rationale=state.get("category_rationale"),
             anonymised_content=state.get("anonymised_content"),
             documents=documents,
         )

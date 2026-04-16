@@ -24,6 +24,7 @@ type CasesContextValue = {
   reject: (id: string, reason: string) => void;
   reinstate: (id: string) => void;
   addCase: (c: EnrichedCase) => void;
+  refresh: () => Promise<void>;
   source: CasesSource;
   loading: boolean;
   error: string | null;
@@ -42,31 +43,28 @@ export function CasesProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState<boolean>(supabaseEnabled());
   const [error, setError] = useState<string | null>(null);
 
+  const refresh = useCallback(async () => {
+    if (!supabaseEnabled()) return;
+    setLoading(true);
+    try {
+      const rows = await fetchCasesFromSupabase();
+      setCases(rows);
+      setSource("supabase");
+      setError(null);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to load cases";
+      console.error("[cases] Supabase fetch failed, using fixtures:", err);
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!supabaseEnabled()) return;
-    let cancelled = false;
-    setLoading(true);
-    fetchCasesFromSupabase()
-      .then((rows) => {
-        if (cancelled) return;
-        setCases(rows);
-        setSource("supabase");
-        setError(null);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        const message =
-          err instanceof Error ? err.message : "Failed to load cases";
-        console.error("[cases] Supabase fetch failed, using fixtures:", err);
-        setError(message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void refresh();
+  }, [refresh]);
 
   const approve = useCallback((id: string) => {
     setCases((prev) =>
@@ -114,6 +112,7 @@ export function CasesProvider({ children }: { children: ReactNode }) {
         reject,
         reinstate,
         addCase,
+        refresh,
         source,
         loading,
         error,

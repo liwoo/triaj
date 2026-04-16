@@ -18,11 +18,12 @@ import { useCases } from "@/store/cases";
 import { useCreateDialog } from "@/store/create-dialog";
 import { supabaseEnabled } from "@/lib/supabase/client";
 import { uploadQuarantineFolder } from "@/lib/storage";
+import { createCaseInSupabase } from "@/lib/cases-api";
 import type { EnrichedCase } from "@/types";
 
 export function CreateCaseDialog() {
   const { open, setOpen } = useCreateDialog();
-  const { addCase } = useCases();
+  const { addCase, refresh } = useCases();
   const router = useRouter();
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -32,6 +33,7 @@ export function CreateCaseDialog() {
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadedFolder, setUploadedFolder] = useState<string | null>(null);
 
   const reset = () => {
     setFiles([]);
@@ -40,6 +42,7 @@ export function CreateCaseDialog() {
     setResult(null);
     setProcessing(false);
     setUploadError(null);
+    setUploadedFolder(null);
   };
 
   const onOpenChange = (v: boolean) => {
@@ -64,42 +67,74 @@ export function CreateCaseDialog() {
     const applicant = applicantName.trim();
     const reference = caseRef.trim() || `REF-${Math.floor(Math.random() * 90000 + 10000)}`;
 
-    if (supabaseEnabled()) {
-      try {
-        const outcome = await uploadQuarantineFolder({
-          caseId: id,
-          applicantName: applicant,
-          caseType,
-          files,
-          metadata: {
-            case_id: id,
-            case_type: caseType,
-            applicant: { name: applicant, reference },
-            created_date: today,
-            file_count: files.length,
-            source: "triaj-ui:create-dialog",
-          },
-        });
-        if (outcome.failed.length > 0) {
-          setUploadError(
-            `${outcome.failed.length} file${outcome.failed.length === 1 ? "" : "s"} failed to upload: ${outcome.failed.map((f) => `${f.name} (${f.message})`).join("; ")}`,
-          );
-          setProcessing(false);
-          return;
-        }
-      } catch (err) {
+    if (!supabaseEnabled()) {
+      setUploadError(
+        "Supabase is not configured in this environment (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY). " +
+          "Restart `npm run dev` after editing .env.local — env vars are loaded on server start.",
+      );
+      setProcessing(false);
+      return;
+    }
+
+    let folder: string;
+    try {
+      const outcome = await uploadQuarantineFolder({
+        caseId: id,
+        applicantName: applicant,
+        caseType,
+        files,
+        metadata: {
+          case_id: id,
+          case_type: caseType,
+          applicant: { name: applicant, reference },
+          created_date: today,
+          file_count: files.length,
+          source: "triaj-ui:create-dialog",
+        },
+      });
+      console.info("[create-case] upload outcome", outcome);
+      if (outcome.failed.length > 0) {
         setUploadError(
-          err instanceof Error ? err.message : "Upload failed — please try again.",
+          `${outcome.failed.length} file${outcome.failed.length === 1 ? "" : "s"} failed to upload: ${outcome.failed.map((f) => `${f.name} (${f.message})`).join("; ")}`,
         );
         setProcessing(false);
         return;
       }
+      folder = outcome.folder;
+      setUploadedFolder(outcome.folder);
+    } catch (err) {
+      console.error("[create-case] upload threw", err);
+      setUploadError(
+        err instanceof Error ? err.message : "Upload failed — please try again.",
+      );
+      setProcessing(false);
+      return;
     }
+
+    try {
+      await createCaseInSupabase({
+        caseId: id,
+        caseType,
+        applicantName: applicant,
+        applicantReference: reference,
+        createdDate: today,
+        uploadedFolder: folder,
+      });
+    } catch (err) {
+      console.error("[create-case] DB insert threw", err);
+      setUploadError(
+        `Files uploaded to "${folder}" but the database insert failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      setProcessing(false);
+      return;
+    }
+
+    void refresh();
 
     const newCase: EnrichedCase = {
       case_id: id,
       case_type: caseType,
-      status: "case_created",
+      status: "processing",
       applicant: {
         name: applicant,
         reference,
@@ -115,12 +150,11 @@ export function CreateCaseDialog() {
           note: `Folder uploaded via create dialog (${files.length} file${files.length === 1 ? "" : "s"}).`,
         },
       ],
-      case_notes: `Newly ingested case — ${files.length} file(s) uploaded. Pending anonymisation and triage.`,
-      state: "case_created",
-      score: 40,
+      case_notes: `Uploaded to uploads-quarantine/${folder}`,
+      state: "processing",
+      score: 0,
       ai_status: "draft",
-      explanation:
-        "Placeholder explanation — this case has not yet been run through the triage agent. Score shown is a pre-triage default until the agent assigns a framework-backed label.",
+      explanation: "",
     };
 
     addCase(newCase);
@@ -154,9 +188,15 @@ export function CreateCaseDialog() {
                   Case {result} created
                 </div>
                 <p className="mt-1 text-sm text-emerald-800 dark:text-emerald-200">
-                  The folder has been queued. It will appear in Pending once
-                  pre-processing and triage complete.
+                  Row inserted into <code>cases</code> with status{" "}
+                  <strong>processing</strong>. Triage agent will fill in the
+                  rest.
                 </p>
+                {uploadedFolder && (
+                  <p className="mt-1 break-all font-mono text-[11px] text-emerald-800/80 dark:text-emerald-200/80">
+                    uploads-quarantine/{uploadedFolder}/
+                  </p>
+                )}
               </div>
             </div>
           </div>

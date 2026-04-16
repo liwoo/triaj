@@ -35,6 +35,13 @@ npx shadcn@latest add <name>    # add more shadcn components
 
 **Known gotcha**: `npx shadcn@latest add` can fall into an interactive "create a new Next.js project" prompt if it fails to detect the existing project. If that happens, cancel the CLI and write the component file manually from `ui.shadcn.com` — the registry output is plain copy-paste, no build magic.
 
+## Supabase integration
+
+- `src/lib/supabase/client.ts` — browser client. `supabaseEnabled()` gates any UI that talks to Supabase so the app still renders against local fixtures if `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` are unset.
+- `src/lib/cases-api.ts` — `fetchCasesFromSupabase()` reads the `cases` / `applicants` / `case_timeline` / `case_required_actions` tables and normalises them into `EnrichedCase`. `CasesProvider` calls this on mount when Supabase is enabled, otherwise falls back to the JSON fixtures.
+- `src/lib/storage.ts` — `uploadQuarantineFolder()` uploads the CreateCaseDialog's files into the `uploads-quarantine` bucket, named `{caseId}_{applicant} - {caseType}`, and writes a `case_data.json` manifest alongside.
+- `src/lib/policies-api.ts` — `fetchPoliciesFromSupabase()` recursively lists the `policy-documents` bucket and resolves public URLs. **Policies are read-only in the app** — uploads / edits happen directly in the Supabase dashboard, not through the UI. If you change this assumption, update the footer copy on the Policies screen too.
+
 ## GOV.UK design system
 
 The UI follows the [GOV.UK Design System page template](https://design-system.service.gov.uk/styles/page-template/). Key conventions — **preserve these when adding new screens**:
