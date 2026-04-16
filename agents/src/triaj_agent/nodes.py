@@ -21,7 +21,7 @@ import anthropic
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
-from triaj_agent import supabase_stub
+from triaj_agent import supabase_client
 from triaj_agent.state import CaseState, ParsedDocument
 
 
@@ -238,7 +238,7 @@ def triage_decision(
 
 
 def quarantine(state: CaseState) -> CaseState:
-    supabase_stub.update_case(
+    supabase_client.update_case(
         state.get("case_id", "unknown"),
         status="quarantined",
         reason=state.get("quarantine_reason"),
@@ -329,7 +329,7 @@ def _policy_system_prompt(policies: list[dict]) -> str:
 
 
 def categorize(state: CaseState) -> CaseState:
-    policies = supabase_stub.get_policy_writes()
+    policies = supabase_client.get_policy_writes()
     anonymised = (state.get("anonymised_content") or "").strip()
 
     if not policies:
@@ -392,14 +392,14 @@ def persist(state: CaseState) -> CaseState:
     if state.get("kind") == "policy":
         # raw_content goes on the row so categorize can load it back from the
         # policies table and present it to Claude as classification context.
-        supabase_stub.update_policy(
+        supabase_client.update_policy(
             record_id,
             status="indexed",
             raw_content=state.get("raw_content"),
             documents=documents,
         )
     else:
-        supabase_stub.update_case(
+        supabase_client.update_case(
             record_id,
             status="triaged",
             category=state.get("category"),
