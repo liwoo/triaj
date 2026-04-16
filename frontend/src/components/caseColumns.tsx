@@ -386,6 +386,7 @@ export function buildCaseColumns({
       id: "actions",
       header: "",
       enableSorting: false,
+      meta: { sticky: "right" },
       cell: (info) => (
         <ActionsMenu
           row={info.row.original}

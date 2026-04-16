@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+from operator import add
+from typing import Annotated, Literal, TypedDict
+
+from pydantic import BaseModel, Field
+
+
+class ParsedDocument(BaseModel):
+    """A single file parsed from the case folder by a LangChain loader."""
+
+    source: str = Field(description="Original file path or object key inside the bucket.")
+    content: str = Field(description="Extracted plain text.")
+    metadata: dict = Field(default_factory=dict)
+
+
+class TraceEvent(TypedDict, total=False):
+    node: str
+    status: Literal["ok", "skipped", "quarantined", "error"]
+    message: str
+
+
+Kind = Literal["case", "policy"]
+
+
+class CaseState(TypedDict, total=False):
+    """State threaded through the ingestion graph.
+
+    Invoked with `case_id`, `bucket_url`, and `kind` ("case" or "policy").
+    - kind="case"   → extract → validate → (quarantine | pii_filter → embedding → categorize → persist)
+    - kind="policy" → extract → embedding → persist
+
+    Quarantine and persist both write to Supabase (cases table for case kind,
+    policies table for policy kind).
+    """
+
+    # ---- input ----
+    case_id: str
+    bucket_url: str
+    kind: Kind
+
+    # ---- extract ----
+    documents: list[ParsedDocument]
+    raw_content: str
+
+    # ---- validate ----
+    is_processable: bool
+    quarantine_reason: str | None
+
+    # ---- pii filter ----
+    anonymised_content: str
+
+    # ---- embedding ----
+    embedding: list[float]
+
+    # ---- categorize ----
+    category: str | None
+    category_confidence: float | None
+
+    # ---- audit ----
+    trace: Annotated[list[TraceEvent], add]

@@ -4,12 +4,17 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
 import type { EnrichedCase } from "@/types";
 import { QUARANTINED_CASES, buildEnrichedCases } from "@/data/cases";
+import { fetchCasesFromSupabase } from "@/lib/cases-api";
+import { supabaseEnabled } from "@/lib/supabase/client";
+
+type CasesSource = "fixtures" | "supabase";
 
 type CasesContextValue = {
   pending: EnrichedCase[];
@@ -19,16 +24,49 @@ type CasesContextValue = {
   reject: (id: string, reason: string) => void;
   reinstate: (id: string) => void;
   addCase: (c: EnrichedCase) => void;
+  source: CasesSource;
+  loading: boolean;
+  error: string | null;
 };
 
 const CasesContext = createContext<CasesContextValue | null>(null);
 
 export function CasesProvider({ children }: { children: ReactNode }) {
-  const initial = useMemo(() => buildEnrichedCases(), []);
+  const fixtureCases = useMemo(
+    () => [...buildEnrichedCases(), ...QUARANTINED_CASES],
+    [],
+  );
 
-  const [cases, setCases] = useState<EnrichedCase[]>(initial);
-  const [quarantined, setQuarantined] =
-    useState<EnrichedCase[]>(QUARANTINED_CASES);
+  const [cases, setCases] = useState<EnrichedCase[]>(fixtureCases);
+  const [source, setSource] = useState<CasesSource>("fixtures");
+  const [loading, setLoading] = useState<boolean>(supabaseEnabled());
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!supabaseEnabled()) return;
+    let cancelled = false;
+    setLoading(true);
+    fetchCasesFromSupabase()
+      .then((rows) => {
+        if (cancelled) return;
+        setCases(rows);
+        setSource("supabase");
+        setError(null);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const message =
+          err instanceof Error ? err.message : "Failed to load cases";
+        console.error("[cases] Supabase fetch failed, using fixtures:", err);
+        setError(message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const approve = useCallback((id: string) => {
     setCases((prev) =>
@@ -47,15 +85,13 @@ export function CasesProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const reinstate = useCallback((id: string) => {
-    setQuarantined((prev) => {
-      const found = prev.find((c) => c.case_id === id);
-      if (!found) return prev;
-      setCases((cs) => [
-        ...cs,
-        { ...found, ai_status: "draft", state: "case_created" },
-      ]);
-      return prev.filter((c) => c.case_id !== id);
-    });
+    setCases((prev) =>
+      prev.map((c) =>
+        c.case_id === id
+          ? { ...c, ai_status: "draft", state: "case_created" }
+          : c,
+      ),
+    );
   }, []);
 
   const addCase = useCallback((c: EnrichedCase) => {
@@ -66,10 +102,22 @@ export function CasesProvider({ children }: { children: ReactNode }) {
     (c) => c.ai_status === "draft" || c.ai_status === "rejected",
   );
   const approved = cases.filter((c) => c.ai_status === "published");
+  const quarantined = cases.filter((c) => c.ai_status === "quarantined");
 
   return (
     <CasesContext.Provider
-      value={{ pending, approved, quarantined, approve, reject, reinstate, addCase }}
+      value={{
+        pending,
+        approved,
+        quarantined,
+        approve,
+        reject,
+        reinstate,
+        addCase,
+        source,
+        loading,
+        error,
+      }}
     >
       {children}
     </CasesContext.Provider>

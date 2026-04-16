@@ -10,8 +10,16 @@ import {
   useReactTable,
   type ColumnDef,
   type ColumnFiltersState,
+  type RowData,
   type SortingState,
 } from "@tanstack/react-table";
+
+declare module "@tanstack/react-table" {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  interface ColumnMeta<TData extends RowData, TValue> {
+    sticky?: "right";
+  }
+}
 import {
   ArrowDown,
   ArrowUp,
@@ -174,6 +182,8 @@ export function DataTable<T>({
                 {hg.headers.map((h) => {
                   const canSort = h.column.getCanSort();
                   const sortDir = h.column.getIsSorted();
+                  const stickyRight =
+                    h.column.columnDef.meta?.sticky === "right";
                   return (
                     <th
                       key={h.id}
@@ -181,6 +191,8 @@ export function DataTable<T>({
                       className={cn(
                         "whitespace-nowrap px-4 py-3 align-bottom text-sm font-bold text-govuk-black dark:text-govuk-white",
                         canSort && "cursor-pointer select-none",
+                        stickyRight &&
+                          "sticky right-0 z-20 border-l border-govuk-mid-grey bg-govuk-white shadow-[-6px_0_6px_-4px_rgba(0,0,0,0.08)] dark:bg-govuk-black",
                       )}
                       onClick={
                         canSort ? h.column.getToggleSortingHandler() : undefined
@@ -220,16 +232,24 @@ export function DataTable<T>({
             {table.getRowModel().rows.map((row) => (
               <tr
                 key={row.id}
-                className="border-b-[1px] border-govuk-mid-grey align-middle"
+                className="group/row border-b-[1px] border-govuk-mid-grey align-middle"
               >
-                {row.getVisibleCells().map((cell) => (
-                  <td
-                    key={cell.id}
-                    className="whitespace-nowrap px-4 py-3 text-sm text-govuk-black dark:text-govuk-white"
-                  >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
+                {row.getVisibleCells().map((cell) => {
+                  const stickyRight =
+                    cell.column.columnDef.meta?.sticky === "right";
+                  return (
+                    <td
+                      key={cell.id}
+                      className={cn(
+                        "whitespace-nowrap px-4 py-3 text-sm text-govuk-black dark:text-govuk-white",
+                        stickyRight &&
+                          "sticky right-0 z-10 border-l border-govuk-mid-grey bg-govuk-white shadow-[-6px_0_6px_-4px_rgba(0,0,0,0.08)] dark:bg-govuk-black",
+                      )}
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
