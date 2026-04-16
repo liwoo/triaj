@@ -32,7 +32,6 @@ export function CasesApprovedPage() {
         data={approved}
         columns={columns}
         searchPlaceholder="Search approved cases…"
-        globalFilterKeys={["case_id", "case_type", "case_notes", "state"]}
         columnFilters={[
           {
             columnId: "case_type",

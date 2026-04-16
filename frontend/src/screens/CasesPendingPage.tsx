@@ -44,8 +44,7 @@ export function CasesPendingPage() {
       <DataTable<EnrichedCase>
         data={pending}
         columns={columns}
-        searchPlaceholder="Search by case ID, applicant, notes…"
-        globalFilterKeys={["case_id", "case_type", "case_notes", "state"]}
+        searchPlaceholder="Search by case ID, applicant, reference, notes…"
         columnFilters={[
           {
             columnId: "case_type",

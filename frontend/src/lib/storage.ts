@@ -31,6 +31,7 @@ export async function uploadQuarantineFolder(params: {
   caseType: string;
   files: File[];
   metadata?: Record<string, unknown>;
+  onProgress?: (done: number, total: number) => void;
 }): Promise<UploadOutcome> {
   const supabase = createClient();
   const folder = buildFolderKey(
@@ -42,7 +43,21 @@ export async function uploadQuarantineFolder(params: {
   const uploaded: string[] = [];
   const failed: { name: string; message: string }[] = [];
 
-  const tasks: Promise<void>[] = params.files.map(async (file) => {
+  // Skip folder-handle sentinels (size=0, no mime) that sneak through plain
+  // DataTransfer.files drops.
+  const realFiles = params.files.filter(
+    (f) => !(f.size === 0 && f.type === ""),
+  );
+
+  const total = realFiles.length + (params.metadata ? 1 : 0);
+  let done = 0;
+  params.onProgress?.(0, total);
+  const tick = () => {
+    done += 1;
+    params.onProgress?.(done, total);
+  };
+
+  const tasks: Promise<void>[] = realFiles.map(async (file) => {
     const safeFileName = file.name.replace(/[/\\]/g, "_");
     const path = `${folder}/${safeFileName}`;
     const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
@@ -51,6 +66,7 @@ export async function uploadQuarantineFolder(params: {
     });
     if (error) failed.push({ name: file.name, message: error.message });
     else uploaded.push(safeFileName);
+    tick();
   });
 
   if (params.metadata) {
@@ -68,6 +84,7 @@ export async function uploadQuarantineFolder(params: {
           });
         if (error) failed.push({ name: "case_data.json", message: error.message });
         else uploaded.push("case_data.json");
+        tick();
       })(),
     );
   }

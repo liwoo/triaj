@@ -57,6 +57,32 @@ interface DataTableProps<T> {
 
 const ALL_VALUE = "__all__";
 
+// Normalise both needle and haystack so "under review" matches "under_review"
+// and searches are case-insensitive.
+function normaliseSearch(s: string) {
+  return s.toLowerCase().replace(/[_-]+/g, " ");
+}
+
+// Deep-walk a row object and collect every string/number leaf value so the
+// search matches nested fields like applicant.name, applicant.reference, and
+// timeline entries — not only the top-level columns.
+function collectSearchable(obj: unknown, out: string[]) {
+  if (obj == null) return;
+  if (typeof obj === "string" || typeof obj === "number") {
+    out.push(String(obj));
+    return;
+  }
+  if (Array.isArray(obj)) {
+    for (const item of obj) collectSearchable(item, out);
+    return;
+  }
+  if (typeof obj === "object") {
+    for (const v of Object.values(obj as Record<string, unknown>)) {
+      collectSearchable(v, out);
+    }
+  }
+}
+
 export function DataTable<T>({
   data,
   columns,
@@ -80,17 +106,18 @@ export function DataTable<T>({
     onGlobalFilterChange: setGlobalFilter,
     globalFilterFn: (row, _columnId, value) => {
       if (!value) return true;
-      const needle = String(value).toLowerCase();
+      const needle = normaliseSearch(String(value));
+      if (!needle) return true;
+
+      const haystacks: string[] = [];
       if (globalFilterKeys?.length) {
-        return globalFilterKeys.some((k) => {
-          const v = (row.original as any)[k];
-          return v != null && String(v).toLowerCase().includes(needle);
-        });
+        for (const k of globalFilterKeys) {
+          collectSearchable((row.original as any)[k], haystacks);
+        }
+      } else {
+        collectSearchable(row.original, haystacks);
       }
-      return row.getAllCells().some((cell) => {
-        const v = cell.getValue();
-        return v != null && String(v).toLowerCase().includes(needle);
-      });
+      return haystacks.some((h) => normaliseSearch(h).includes(needle));
     },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),

@@ -29,7 +29,6 @@ export function CasesQuarantinedPage() {
         data={quarantined}
         columns={columns}
         searchPlaceholder="Search quarantined cases…"
-        globalFilterKeys={["case_id", "case_notes"]}
         emptyMessage="No cases currently quarantined."
       />
 

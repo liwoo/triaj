@@ -266,17 +266,24 @@ def triage_decision(
 
 
 def quarantine(state: CaseState) -> CaseState:
+    reason = state.get("quarantine_reason") or "unspecified"
+    # Write all three status fields so the UI actually moves off "Processing":
+    # `state='processing'` is the insert-time value; the frontend keeps showing
+    # "Processing" until the agent replaces it with a terminal state.
     supabase_client.update_case(
         state.get("case_id", "unknown"),
         status="quarantined",
-        reason=state.get("quarantine_reason"),
+        state="quarantined",
+        ai_status="quarantined",
+        rejection_reason=reason,
+        explanation=f"Quarantined by pre-processing: {reason}",
     )
     return {
         "trace": [
             {
                 "node": "quarantine",
                 "status": "quarantined",
-                "message": state.get("quarantine_reason") or "unspecified",
+                "message": reason,
             }
         ]
     }
@@ -339,6 +346,42 @@ def _anthropic_client() -> anthropic.Anthropic:
 
 _CATEGORIZE_MODEL = os.getenv("TRIAGE_MODEL", "claude-opus-4-6")
 
+# Tool-use-for-structured-output: works on direct Anthropic, Bedrock, and
+# LiteLLM gateways, unlike `messages.parse(output_format=...)` which depends
+# on the newer structured-outputs API that Bedrock doesn't yet expose.
+_CATEGORIZE_TOOL = {
+    "name": "record_categorisation",
+    "description": (
+        "Record the best-matching policy for this complaint. Call this tool "
+        "exactly once with your decision."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "policy_id": {
+                "type": "string",
+                "description": (
+                    "ID of the best-matching policy from the supplied list, "
+                    "or 'unclassified' if no policy fits."
+                ),
+            },
+            "confidence": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0,
+                "description": "0.0 (no match) to 1.0 (perfect match).",
+            },
+            "rationale": {
+                "type": "string",
+                "description": (
+                    "Short explanation that quotes the matched policy where possible."
+                ),
+            },
+        },
+        "required": ["policy_id", "confidence", "rationale"],
+    },
+}
+
 
 def _policy_system_prompt(policies: list[dict]) -> str:
     policy_block = "\n\n---\n\n".join(
@@ -347,17 +390,16 @@ def _policy_system_prompt(policies: list[dict]) -> str:
     )
     return (
         "You are the Triaj categorisation node. Classify the anonymised "
-        "complaint against the institution's policies below. Pick the best-matching "
-        "policy_id, a confidence score from 0.0 to 1.0, and a short rationale that "
-        "quotes the relevant text where possible. If nothing matches well, return "
-        "policy_id='unclassified' with low confidence.\n\n"
+        "complaint against the institution's policies below. Call the "
+        "`record_categorisation` tool exactly once with your decision. "
+        "If nothing matches well, use policy_id='unclassified' with low confidence.\n\n"
         "--- Policies ---\n"
         f"{policy_block}"
     )
 
 
 def categorize(state: CaseState) -> CaseState:
-    policies = supabase_client.get_policy_writes()
+    policies = supabase_client.list_policy_documents()
     anonymised = (state.get("anonymised_content") or "").strip()
 
     if not policies:
@@ -374,7 +416,7 @@ def categorize(state: CaseState) -> CaseState:
             ],
         }
 
-    response = _anthropic_client().messages.parse(
+    response = _anthropic_client().messages.create(
         model=_CATEGORIZE_MODEL,
         max_tokens=1024,
         system=[
@@ -385,10 +427,29 @@ def categorize(state: CaseState) -> CaseState:
             }
         ],
         messages=[{"role": "user", "content": anonymised}],
-        output_format=_Categorization,
+        tools=[_CATEGORIZE_TOOL],
+        tool_choice={"type": "tool", "name": "record_categorisation"},
     )
 
-    result: _Categorization = response.parsed_output
+    tool_use = next(
+        (b for b in response.content if getattr(b, "type", None) == "tool_use"),
+        None,
+    )
+    if tool_use is None:
+        return {
+            "category": None,
+            "category_confidence": None,
+            "category_rationale": None,
+            "trace": [
+                {
+                    "node": "categorize",
+                    "status": "error",
+                    "message": "model did not emit a tool_use block",
+                }
+            ],
+        }
+
+    result = _Categorization.model_validate(tool_use.input)
     category = None if result.policy_id == "unclassified" else result.policy_id
 
     return {
@@ -427,12 +488,18 @@ def persist(state: CaseState) -> CaseState:
             documents=documents,
         )
     else:
+        # Move the case out of the frontend's "Processing" state by writing
+        # all three status-axis columns. `case_created` is the first workflow
+        # state in data/states.json, so caseworkers see a normal fresh case.
+        # `ai_status='draft'` marks it as ready for human review.
         supabase_client.update_case(
             record_id,
-            status="triaged",
+            status="case_created",
+            state="case_created",
+            ai_status="draft",
+            explanation=state.get("category_rationale"),
             category=state.get("category"),
             category_confidence=state.get("category_confidence"),
-            category_rationale=state.get("category_rationale"),
             anonymised_content=state.get("anonymised_content"),
             documents=documents,
         )

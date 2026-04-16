@@ -60,24 +60,41 @@ def _lazy_client():
     return _client
 
 
-def _case_row(fields: dict[str, Any]) -> dict[str, Any]:
-    """Map agent outputs to the columns that exist in the `cases` table today.
+_DIRECT_COLUMNS = {
+    "status",
+    "state",
+    "ai_status",
+    "assigned_to",
+    "explanation",
+    "rejection_reason",
+    "score",
+    "framework_version",
+    "anonymised_at",
+    "case_notes",
+}
 
-    Everything that doesn't have a dedicated column is JSON-encoded into
-    `case_notes`. Replace with typed columns once the schema catches up.
+
+def _case_row(fields: dict[str, Any]) -> dict[str, Any]:
+    """Map agent outputs onto the `cases` columns.
+
+    Real columns (status, state, ai_status, explanation, rejection_reason,
+    score, etc.) are passed through directly. Everything else (category,
+    category_confidence, documents, ...) is JSON-packed into `case_notes`
+    until dedicated columns exist.
     """
 
     now = datetime.now(timezone.utc).isoformat()
-    core_columns = {"status", "assigned_to", "case_notes"}
-    extras = {k: v for k, v in fields.items() if k not in core_columns and v is not None}
+    row: dict[str, Any] = {"last_updated": now}
 
-    row: dict[str, Any] = {
-        "status": fields.get("status", "triaged"),
-        "last_updated": now,
+    for col in _DIRECT_COLUMNS - {"case_notes"}:
+        if fields.get(col) is not None:
+            row[col] = fields[col]
+
+    extras = {
+        k: v
+        for k, v in fields.items()
+        if k not in _DIRECT_COLUMNS and v is not None
     }
-    if fields.get("assigned_to"):
-        row["assigned_to"] = fields["assigned_to"]
-
     notes_parts: list[str] = []
     if fields.get("case_notes"):
         notes_parts.append(str(fields["case_notes"]))
@@ -127,6 +144,77 @@ def get_writes() -> list[dict[str, Any]]:
 
 def get_policy_writes() -> list[dict[str, Any]]:
     return list(_POLICY_WRITES)
+
+
+def list_policy_documents() -> list[dict[str, Any]]:
+    """Return the full policy corpus for classification.
+
+    Reads every file in the `policy-documents` Supabase storage bucket,
+    extracts plain text via the shared LangChain loaders, and returns
+    `[{policy_id, raw_content}, ...]`.
+
+    Falls back to `_POLICY_WRITES` (the in-memory list populated by
+    `update_policy` during a `kind="policy"` upload) when SUPABASE_URL /
+    SUPABASE_ANON_KEY are unset — so tests and offline dev still work.
+    Policies ingested via the graph in the current process are merged
+    with the bucket contents, so newly-ingested policies are immediately
+    visible to `categorize` without waiting for an upload to storage.
+    """
+
+    client = _lazy_client()
+    if client is None:
+        return get_policy_writes()
+
+    from triaj_agent.loaders import load_bytes_as_text
+
+    try:
+        paths = _list_bucket_recursive(client, "policy-documents", "")
+    except Exception as e:
+        log.warning("failed to list policy-documents bucket: %s", e)
+        return list(_POLICY_WRITES)
+
+    storage = client.storage.from_("policy-documents")
+    out: list[dict[str, Any]] = []
+    for path in paths:
+        try:
+            data = storage.download(path)
+        except Exception as e:
+            log.warning("failed to download policy '%s': %s", path, e)
+            continue
+        try:
+            text = load_bytes_as_text(path, data)
+        except Exception as e:
+            log.warning("failed to extract text from policy '%s': %s", path, e)
+            continue
+        if text.strip():
+            out.append({"policy_id": path, "raw_content": text})
+
+    # Include in-memory writes from the current process too — a policy uploaded
+    # via the graph this run should be classifiable immediately, even if the
+    # bucket doesn't reflect it yet.
+    out.extend(get_policy_writes())
+    return out
+
+
+def _list_bucket_recursive(client, bucket: str, prefix: str) -> list[str]:
+    """Recursively list every object path under `prefix` in `bucket`.
+
+    supabase-py returns folder entries with `id is None`; file entries carry
+    an id and metadata. Walk into folders, collect paths of files.
+    """
+
+    items = client.storage.from_(bucket).list(prefix) or []
+    out: list[str] = []
+    for item in items:
+        name = item.get("name") or ""
+        if not name:
+            continue
+        full = f"{prefix}/{name}" if prefix else name
+        if item.get("id") is None:
+            out.extend(_list_bucket_recursive(client, bucket, full))
+        else:
+            out.append(full)
+    return out
 
 
 def reset() -> None:

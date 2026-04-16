@@ -19,6 +19,7 @@ import { useCreateDialog } from "@/store/create-dialog";
 import { supabaseEnabled } from "@/lib/supabase/client";
 import { uploadQuarantineFolder } from "@/lib/storage";
 import { createCaseInSupabase } from "@/lib/cases-api";
+import { extractFilesFromDrop } from "@/lib/file-drop";
 import type { EnrichedCase } from "@/types";
 
 export function CreateCaseDialog() {
@@ -34,6 +35,11 @@ export function CreateCaseDialog() {
   const [result, setResult] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadedFolder, setUploadedFolder] = useState<string | null>(null);
+  const [phase, setPhase] = useState<"idle" | "uploading" | "creating">("idle");
+  const [progress, setProgress] = useState<{ done: number; total: number }>({
+    done: 0,
+    total: 0,
+  });
 
   const reset = () => {
     setFiles([]);
@@ -43,6 +49,8 @@ export function CreateCaseDialog() {
     setProcessing(false);
     setUploadError(null);
     setUploadedFolder(null);
+    setPhase("idle");
+    setProgress({ done: 0, total: 0 });
   };
 
   const onOpenChange = (v: boolean) => {
@@ -53,7 +61,16 @@ export function CreateCaseDialog() {
   const onPick = () => inputRef.current?.click();
   const onFiles = (list: FileList | null) => {
     if (!list) return;
-    setFiles(Array.from(list));
+    // webkitdirectory input returns real File objects per leaf; filter out any
+    // zero-byte / untyped entries that sneak in as directory sentinels.
+    setFiles(
+      Array.from(list).filter((f) => !(f.size === 0 && f.type === "")),
+    );
+  };
+  const onDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const expanded = await extractFilesFromDrop(e.dataTransfer);
+    setFiles(expanded);
   };
 
   const onSubmit = async () => {
@@ -77,6 +94,8 @@ export function CreateCaseDialog() {
     }
 
     let folder: string;
+    setPhase("uploading");
+    setProgress({ done: 0, total: files.length + 1 });
     try {
       const outcome = await uploadQuarantineFolder({
         caseId: id,
@@ -91,6 +110,7 @@ export function CreateCaseDialog() {
           file_count: files.length,
           source: "triaj-ui:create-dialog",
         },
+        onProgress: (done, total) => setProgress({ done, total }),
       });
       console.info("[create-case] upload outcome", outcome);
       if (outcome.failed.length > 0) {
@@ -111,6 +131,7 @@ export function CreateCaseDialog() {
       return;
     }
 
+    setPhase("creating");
     try {
       await createCaseInSupabase({
         caseId: id,
@@ -200,6 +221,37 @@ export function CreateCaseDialog() {
               </div>
             </div>
           </div>
+        ) : processing ? (
+          <div className="space-y-3 py-2">
+            <div className="flex items-center gap-2 text-sm">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <span className="font-medium">
+                {phase === "uploading"
+                  ? `Uploading ${progress.done} of ${progress.total} file${progress.total === 1 ? "" : "s"}…`
+                  : phase === "creating"
+                    ? "Creating case record…"
+                    : "Preparing…"}
+              </span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{
+                  width:
+                    phase === "creating"
+                      ? "100%"
+                      : progress.total > 0
+                        ? `${Math.min(100, Math.round((progress.done / progress.total) * 100))}%`
+                        : "0%",
+                }}
+              />
+            </div>
+            {phase === "uploading" && files.length > 0 && (
+              <p className="break-all font-mono text-[11px] text-muted-foreground">
+                → uploads-quarantine/
+              </p>
+            )}
+          </div>
         ) : (
           <div className="space-y-4">
             {uploadError && (
@@ -216,10 +268,7 @@ export function CreateCaseDialog() {
               <div
                 onClick={onPick}
                 onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  onFiles(e.dataTransfer.files);
-                }}
+                onDrop={onDrop}
                 className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed bg-muted/30 px-6 py-8 text-center hover:bg-muted/50"
               >
                 <FolderUp className="h-6 w-6 text-muted-foreground" />
