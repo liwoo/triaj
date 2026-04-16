@@ -1,16 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import {
-  CheckCircle2,
-  ClipboardList,
-  ShieldAlert,
-  TrendingUp,
-} from "lucide-react";
 import { PageHeader } from "@/components/Layout";
 import { useCases } from "@/store/cases";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getStateColor, getWorkflowState } from "@/data/cases";
 import { badgeColor, cn } from "@/lib/utils";
 
@@ -38,69 +31,55 @@ export function DashboardPage() {
   return (
     <div>
       <PageHeader
-        title="Dashboard"
-        description="Triage health across the caseload."
+        caption="Triaj"
+        title="Complaints triage dashboard"
+        description="Service health across the caseload — pending review, published decisions, and priority mix."
       />
 
-      <div className="grid grid-cols-4 gap-4">
-        <StatCard
-          icon={<ClipboardList className="h-4 w-4" />}
-          label="Pending review"
-          value={pending.length}
-          href="/cases/pending"
-        />
-        <StatCard
-          icon={<CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
-          label="Published"
-          value={approved.length}
-          href="/cases/approved"
-        />
-        <StatCard
-          icon={<ShieldAlert className="h-4 w-4 text-destructive" />}
+      <div className="grid grid-cols-2 gap-0 border-t-[1px] border-govuk-mid-grey sm:grid-cols-4">
+        <StatTile label="Pending review" value={pending.length} href="/cases/pending" />
+        <StatTile label="Published" value={approved.length} href="/cases/approved" />
+        <StatTile
           label="Quarantined"
           value={quarantined.length}
           href="/cases/quarantined"
         />
-        <StatCard
-          icon={<TrendingUp className="h-4 w-4 text-muted-foreground" />}
-          label="Avg. AI score"
-          value={avgScore}
-        />
+        <StatTile label="Avg. AI score" value={avgScore} />
       </div>
 
-      <div className="mt-6 grid grid-cols-3 gap-4">
-        <Card className="col-span-2">
-          <CardHeader>
-            <CardTitle className="text-sm">Priority mix</CardTitle>
-            <CardDescription>
-              AI scores on all pending and published cases.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Bar label="Urgent (≥75)" count={urgent} total={all.length} color="bg-red-500" />
+      <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-3">
+        <section className="lg:col-span-2">
+          <h2 className="text-[24px] font-bold text-govuk-black dark:text-govuk-white">
+            Priority mix
+          </h2>
+          <p className="mt-1 text-base text-govuk-dark-grey dark:text-govuk-mid-grey">
+            AI scores across all pending and published cases.
+          </p>
+          <div className="mt-4 space-y-4">
+            <Bar label="Urgent (≥75)" count={urgent} total={all.length} tone="red" />
             <Bar
               label="High (50–74)"
               count={highScore}
               total={all.length}
-              color="bg-amber-500"
+              tone="amber"
             />
             <Bar
               label="Standard (<50)"
               count={all.length - urgent - highScore}
               total={all.length}
-              color="bg-emerald-500"
+              tone="green"
             />
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">By state</CardTitle>
-            <CardDescription>
-              Current workflow state across the caseload.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
+        <section>
+          <h2 className="text-[24px] font-bold text-govuk-black dark:text-govuk-white">
+            By state
+          </h2>
+          <p className="mt-1 text-base text-govuk-dark-grey dark:text-govuk-mid-grey">
+            Current workflow state.
+          </p>
+          <dl className="mt-4 divide-y divide-govuk-mid-grey/60 border-t border-govuk-mid-grey dark:divide-white/10 dark:border-white/10">
             {Object.entries(byState)
               .sort((a, b) => b[1].count - a[1].count)
               .map(([state, info]) => {
@@ -108,76 +87,88 @@ export function DashboardPage() {
                 return (
                   <div
                     key={state}
-                    className="flex items-center justify-between text-sm"
+                    className="flex items-center justify-between py-2"
                   >
-                    <Badge
-                      variant="outline"
-                      className={cn(badgeColor(getStateColor(state)), "border")}
-                    >
-                      {meta?.label ?? state.replace(/_/g, " ")}
-                    </Badge>
-                    <span className="font-medium">{info.count}</span>
+                    <dt>
+                      <Badge
+                        variant="outline"
+                        className={cn(badgeColor(getStateColor(state)))}
+                      >
+                        {meta?.label ?? state.replace(/_/g, " ")}
+                      </Badge>
+                    </dt>
+                    <dd className="font-bold text-govuk-black dark:text-govuk-white">
+                      {info.count}
+                    </dd>
                   </div>
                 );
               })}
-          </CardContent>
-        </Card>
+          </dl>
+        </section>
       </div>
     </div>
   );
 }
 
-function StatCard({
-  icon,
+function StatTile({
   label,
   value,
   href,
 }: {
-  icon: React.ReactNode;
   label: string;
   value: number;
   href?: string;
 }) {
   const body = (
-    <Card className="transition-colors hover:bg-accent/40">
-      <CardContent className="pt-5">
-        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-          {icon} {label}
-        </div>
-        <div className="mt-2 text-2xl font-semibold">{value}</div>
-      </CardContent>
-    </Card>
+    <div className="h-full border-b-[1px] border-r-0 border-govuk-mid-grey py-5 pr-6 sm:border-r-[1px]">
+      <div className="text-sm font-normal text-govuk-dark-grey dark:text-govuk-mid-grey">
+        {label}
+      </div>
+      <div className="mt-1 text-[36px] font-bold leading-none text-govuk-black dark:text-govuk-white">
+        {value}
+      </div>
+    </div>
   );
-  return href ? (
-    <Link href={href} className="block">
+  if (!href) return body;
+  return (
+    <Link
+      href={href}
+      className="block h-full text-govuk-black no-underline hover:bg-govuk-light-grey dark:text-govuk-white dark:hover:bg-[#2a2a2a]"
+    >
       {body}
     </Link>
-  ) : (
-    body
   );
 }
+
+const BAR_TONE: Record<string, string> = {
+  red: "bg-govuk-red",
+  amber: "bg-[#f47738]",
+  green: "bg-govuk-green",
+};
 
 function Bar({
   label,
   count,
   total,
-  color,
+  tone,
 }: {
   label: string;
   count: number;
   total: number;
-  color: string;
+  tone: keyof typeof BAR_TONE;
 }) {
   const pct = total > 0 ? (count / total) * 100 : 0;
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-        <span>{label}</span>
-        <span className="font-medium text-foreground">{count}</span>
+      <div className="mb-1 flex items-center justify-between text-sm">
+        <span className="text-govuk-black dark:text-govuk-white">{label}</span>
+        <span className="font-bold text-govuk-black dark:text-govuk-white">
+          {count}
+        </span>
       </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+      <div className="h-2.5 w-full overflow-hidden bg-govuk-light-grey dark:bg-[#2a2a2a]">
         <div
-          className={`h-full rounded-full ${color}`}
+          className={cn("h-full", BAR_TONE[tone])}
           style={{ width: `${pct}%` }}
         />
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, X } from "lucide-react";
+import { AlertTriangle, Check, Copy, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -155,6 +155,35 @@ export function CaseDetailModal({
               </div>
             )}
           </Section>
+
+          {caseItem.required_action && (
+            <Section title="Required action">
+              <div
+                className={cn(
+                  "flex gap-3 rounded-lg border p-3 text-sm",
+                  caseItem.required_action.severity === "critical"
+                    ? "border-red-200 bg-red-50 text-red-900 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-100"
+                    : caseItem.required_action.severity === "warning"
+                      ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100"
+                      : "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-100",
+                )}
+              >
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div className="space-y-1">
+                  <div className="font-medium">
+                    {caseItem.required_action.label}
+                  </div>
+                  {caseItem.required_action.items.length > 0 && (
+                    <ul className="list-disc space-y-0.5 pl-5 text-xs leading-relaxed">
+                      {caseItem.required_action.items.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </Section>
+          )}
 
           {stateMeta && (
             <Section title={`${stateLabel} — policy requirements`}>

@@ -5,21 +5,30 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// GOV.UK tag palette. Every colour pair uses the official GOV.UK light
+// background + dark text combinations. Dark-mode inverts the pair so tags
+// remain legible against a black body background.
 const BADGE_COLORS: Record<string, string> = {
+  // Neutral (grey)
   slate:
-    "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800/60 dark:text-slate-200 dark:border-slate-700",
-  amber:
-    "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-900",
-  sky:
-    "bg-sky-50 text-sky-800 border-sky-200 dark:bg-sky-950/50 dark:text-sky-200 dark:border-sky-900",
-  indigo:
-    "bg-indigo-50 text-indigo-800 border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-200 dark:border-indigo-900",
-  red:
-    "bg-red-50 text-red-800 border-red-200 dark:bg-red-950/50 dark:text-red-200 dark:border-red-900",
-  emerald:
-    "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-200 dark:border-emerald-900",
+    "bg-[#eeefef] text-[#383f43] dark:bg-[#383f43] dark:text-[#eeefef]",
   stone:
-    "bg-stone-100 text-stone-700 border-stone-300 dark:bg-stone-800/60 dark:text-stone-200 dark:border-stone-700",
+    "bg-[#eeefef] text-[#383f43] dark:bg-[#383f43] dark:text-[#eeefef]",
+  // Warning (yellow)
+  amber:
+    "bg-govuk-light-yellow text-[#594d00] dark:bg-[#594d00] dark:text-govuk-light-yellow",
+  // Informational (blue)
+  sky:
+    "bg-[#d2e2f1] text-[#144e81] dark:bg-[#144e81] dark:text-[#d2e2f1]",
+  // In-progress / review (purple)
+  indigo:
+    "bg-govuk-light-purple text-[#3d2375] dark:bg-[#3d2375] dark:text-govuk-light-purple",
+  // Error / escalation (red)
+  red:
+    "bg-govuk-light-red text-[#942514] dark:bg-[#942514] dark:text-govuk-light-red",
+  // Success (green)
+  emerald:
+    "bg-govuk-light-green text-[#005a30] dark:bg-[#005a30] dark:text-govuk-light-green",
 };
 
 export function badgeColor(color: string | undefined) {

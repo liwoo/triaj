@@ -22,7 +22,13 @@ export type RawCase = {
   case_notes: string;
 };
 
-export type AiStatus = "draft" | "published" | "rejected" | "quarantined";
+export type AiStatus = string;
+
+export type RequiredAction = {
+  label: string;
+  items: string[];
+  severity?: "info" | "warning" | "critical";
+};
 
 export type EnrichedCase = RawCase & {
   state: string;
@@ -30,6 +36,7 @@ export type EnrichedCase = RawCase & {
   ai_status: AiStatus;
   explanation: string;
   rejection_reason?: string;
+  required_action?: RequiredAction;
 };
 
 export type WorkflowState = {

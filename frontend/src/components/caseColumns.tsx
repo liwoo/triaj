@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  AlertTriangle,
   Check,
   Copy,
   Eye,
@@ -36,7 +37,7 @@ import {
   getWorkflowState,
 } from "@/data/cases";
 import { badgeColor, cn, formatDate } from "@/lib/utils";
-import type { EnrichedCase } from "@/types";
+import type { EnrichedCase, RequiredAction } from "@/types";
 
 export interface CaseColumnActions {
   onView: (c: EnrichedCase) => void;
@@ -44,6 +45,51 @@ export interface CaseColumnActions {
   onReject?: (c: EnrichedCase) => void;
   onReinstate?: (c: EnrichedCase) => void;
   readOnly?: boolean;
+}
+
+const REQUIRED_ACTION_TONE: Record<
+  NonNullable<RequiredAction["severity"]>,
+  string
+> = {
+  info: "text-sky-600 hover:text-sky-700",
+  warning: "text-amber-600 hover:text-amber-700",
+  critical: "text-red-600 hover:text-red-700",
+};
+
+function RequiredActionIndicator({ action }: { action: RequiredAction }) {
+  const tone =
+    REQUIRED_ACTION_TONE[action.severity ?? "warning"] ??
+    REQUIRED_ACTION_TONE.warning;
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            className={cn(
+              "inline-flex h-5 w-5 items-center justify-center rounded-full transition",
+              tone,
+            )}
+            aria-label={action.label}
+            type="button"
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs">
+          <div className="text-[11px] font-semibold uppercase tracking-wider">
+            {action.label}
+          </div>
+          {action.items.length > 0 && (
+            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs leading-relaxed">
+              {action.items.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 const STATUS_DOT: Record<string, string> = {
@@ -278,12 +324,17 @@ export function buildCaseColumns({
         const c = info.row.original;
         const meta = getWorkflowState(c.case_type, c.state);
         return (
-          <Badge
-            variant="outline"
-            className={cn(badgeColor(getStateColor(c.state)), "border")}
-          >
-            {meta?.label ?? c.state}
-          </Badge>
+          <span className="inline-flex items-center gap-1.5">
+            <Badge
+              variant="outline"
+              className={cn(badgeColor(getStateColor(c.state)), "border")}
+            >
+              {meta?.label ?? c.state}
+            </Badge>
+            {c.required_action && (
+              <RequiredActionIndicator action={c.required_action} />
+            )}
+          </span>
         );
       },
       filterFn: (row, id, value) =>

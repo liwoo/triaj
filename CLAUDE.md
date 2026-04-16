@@ -14,7 +14,8 @@ Only the frontend UI shell has been scaffolded. Backend (ingestion, PII pipeline
   - `src/screens/` — page-level React components (client components). These are imported by the thin `app/**/page.tsx` entry files.
   - `src/components/` — shared components. `Sidebar`, `Layout` (header), `DataTable` (TanStack Table v8 wrapper with search, column filters, sorting, pagination), `CaseDetailModal`, `RejectDialog`, `caseColumns` (reusable column builder).
   - `src/lib/seo.ts` — single source of truth for `siteUrl`, `siteName`, tagline, description, keywords. `siteUrl` reads `NEXT_PUBLIC_SITE_URL` with a localhost fallback — set this env var in every non-local deploy or canonical URLs, OG tags, sitemap, and robots will point at localhost.
-  - `src/components/ui/` — real **shadcn/ui** components (New York style, slate base, CSS variables). Configured via `components.json`. Installed: button, badge, input, textarea, select, dialog, tooltip, hover-card, dropdown-menu, table, scroll-area, separator, card, label. Customise by editing the files directly — that's the shadcn model.
+  - `src/components/ui/` — shadcn/ui primitives **restyled to match the GOV.UK Design System** (black 2px borders on inputs, GOV.UK green/red/grey buttons with a 2px bottom shadow and `active:top-[2px]` press-down, GOV.UK-tag-shaped badges with uppercase text and no radius). The shadcn API is unchanged — only the classes differ — so `<Button variant="destructive">` renders as a GOV.UK warning button, etc. Radius is set to `0` globally (`--radius: 0` in `app/globals.css`) so any remaining rounded-* Tailwind classes collapse to square corners.
+  - `src/components/gov/` — GOV.UK-specific chrome that has no shadcn equivalent: `GovCrown` (inline SVG of the official Tudor Crown logotype), `GovSkipLink`, `GovHeader` (black bar + service name + primary nav + global "Create new case" button), `GovPhaseBanner` (alpha/beta tag), `GovBackLink`, `GovFooter` (Open Government Licence, Crown copyright), `GovTag` (standalone tag component with the 9 GOV.UK colour pairs), `GovPageHeader`. `src/components/Layout.tsx` is a thin re-export shim so screens can keep importing `PageHeader`.
   - `src/store/cases.tsx` — in-memory `CasesProvider` context holding pending / approved / quarantined cases plus `approve` / `reject` / `reinstate` / `addCase` actions. **Not persisted** — state resets on reload.
   - `src/store/create-dialog.tsx` — tiny `CreateDialogProvider` context that controls the global Create Case modal. The sidebar's "Create" button calls `setOpen(true)`; `<CreateCaseDialog />` is mounted once in `app/(app)/layout.tsx` and listens for that signal. There is intentionally no `/create` route — creation is modal-only.
   - `src/components/theme-provider.tsx` / `src/components/ModeToggle.tsx` — `next-themes` wrapper and the light/dark/system toggle rendered in the sidebar header. `app/layout.tsx` sets `suppressHydrationWarning` on `<html>` to prevent the theme-class mismatch warning on first paint. All colour classes outside the shadcn token set (the `badgeColor()` helper, the CreateCaseDialog success card, and the dashboard "Published" icon) carry explicit `dark:` variants — avoid adding new hard-coded colour classes without dark equivalents.
@@ -33,6 +34,19 @@ npx shadcn@latest add <name>    # add more shadcn components
 ```
 
 **Known gotcha**: `npx shadcn@latest add` can fall into an interactive "create a new Next.js project" prompt if it fails to detect the existing project. If that happens, cancel the CLI and write the component file manually from `ui.shadcn.com` — the registry output is plain copy-paste, no build magic.
+
+## GOV.UK design system
+
+The UI follows the [GOV.UK Design System page template](https://design-system.service.gov.uk/styles/page-template/). Key conventions — **preserve these when adding new screens**:
+
+- **Layout**: `app/(app)/layout.tsx` wraps pages in `GovSkipLink` → `GovHeader` → `GovPhaseBanner` → `<main id="main-content">` (wrapped by `.govuk-width`) → `GovFooter`. Don't reintroduce a sidebar.
+- **Width container**: use the `govuk-width` utility (custom class in `globals.css`) rather than Tailwind `max-w-*`. It locks content to the 960px GDS canonical width with the correct horizontal padding breakpoints.
+- **Colours**: `tailwind.config.ts` exposes the full GOV.UK palette under `govuk-*` (e.g. `bg-govuk-blue`, `text-govuk-black`, `bg-govuk-light-grey`). Use these in preference to Tailwind's default palette. The `badgeColor()` helper in `lib/utils.ts` maps legacy colour keys (`slate`, `amber`, `sky`, `indigo`, `red`, `emerald`, `stone`) to GOV.UK tag colour pairs, so existing `<Badge variant="outline" className={badgeColor(color)}>` call-sites render correctly without changes.
+- **Focus styles**: a global `:focus-visible` rule in `globals.css` applies the GOV.UK yellow background + 4px black bottom bar. Don't add component-level `focus-visible:ring-*` — it will fight the GOV.UK style.
+- **Typography**: body defaults to `"GDS Transport", Arial, Helvetica, sans-serif`. GDS Transport is Crown-copyrighted and only licensed for services on the GOV.UK subdomain; production deploys to a different domain fall back to Arial, which is the GDS fallback anyway.
+- **Buttons**: variants map — `default` → GOV.UK green primary, `destructive` → GOV.UK red warning, `outline`/`secondary` → GOV.UK grey secondary. The 2px bottom shadow + `active:top-[2px]` is core to the look; don't remove it.
+- **Phase banner**: the alpha tag is set in `app/(app)/layout.tsx`. Change to `phase="beta"` when the service is ready for broader use.
+- **OGL + Crown copyright**: the footer includes the required Open Government Licence v3.0 statement and Crown copyright notice. These are template requirements for any gov.uk service — don't remove them.
 
 ## SEO
 

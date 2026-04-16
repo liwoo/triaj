@@ -29,14 +29,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
 export interface ColumnFilterConfig {
@@ -115,66 +107,79 @@ export function DataTable<T>({
   const hasFilters = filters.length > 0 || !!globalFilter;
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            placeholder={searchPlaceholder}
-            className="w-64 pl-8"
-          />
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-bold text-govuk-black dark:text-govuk-white">
+            Search
+          </label>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-govuk-dark-grey" />
+            <Input
+              value={globalFilter}
+              onChange={(e) => setGlobalFilter(e.target.value)}
+              placeholder={searchPlaceholder}
+              className="w-72 pl-8"
+            />
+          </div>
         </div>
         {columnFilters.map((cf) => (
-          <Select
-            key={cf.columnId}
-            value={filterState[cf.columnId] || ALL_VALUE}
-            onValueChange={(v) => setColumnFilter(cf.columnId, v)}
-          >
-            <SelectTrigger className="h-9 w-[180px]">
-              <SelectValue placeholder={cf.label} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_VALUE}>{cf.label}: all</SelectItem>
-              {cf.options.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div key={cf.columnId} className="flex flex-col gap-1">
+            <label className="text-sm font-bold text-govuk-black dark:text-govuk-white">
+              {cf.label}
+            </label>
+            <Select
+              value={filterState[cf.columnId] || ALL_VALUE}
+              onValueChange={(v) => setColumnFilter(cf.columnId, v)}
+            >
+              <SelectTrigger className="h-10 w-[200px] border-[2px] border-govuk-black bg-govuk-white text-govuk-black dark:border-govuk-mid-grey dark:bg-govuk-black dark:text-govuk-white">
+                <SelectValue placeholder={cf.label} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_VALUE}>All</SelectItem>
+                {cf.options.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         ))}
         {hasFilters && (
           <Button
-            size="sm"
             variant="ghost"
             onClick={() => {
               setFilters([]);
               setGlobalFilter("");
             }}
           >
-            Clear
+            Clear filters
           </Button>
         )}
-        <div className="ml-auto text-xs text-muted-foreground">
-          {table.getFilteredRowModel().rows.length} of {data.length}
+        <div className="ml-auto pb-1 text-sm text-govuk-dark-grey dark:text-govuk-mid-grey">
+          Showing <strong>{table.getFilteredRowModel().rows.length}</strong> of{" "}
+          <strong>{data.length}</strong>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
-        <Table>
-          <TableHeader>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-left">
+          <thead>
             {table.getHeaderGroups().map((hg) => (
-              <TableRow key={hg.id}>
+              <tr
+                key={hg.id}
+                className="border-b-[1px] border-govuk-mid-grey"
+              >
                 {hg.headers.map((h) => {
                   const canSort = h.column.getCanSort();
                   const sortDir = h.column.getIsSorted();
                   return (
-                    <TableHead
+                    <th
                       key={h.id}
+                      scope="col"
                       className={cn(
-                        "h-11 whitespace-nowrap px-4 text-xs uppercase tracking-wide text-muted-foreground",
+                        "whitespace-nowrap px-4 py-3 align-bottom text-sm font-bold text-govuk-black dark:text-govuk-white",
                         canSort && "cursor-pointer select-none",
                       )}
                       onClick={
@@ -184,7 +189,7 @@ export function DataTable<T>({
                       <span className="inline-flex items-center gap-1">
                         {flexRender(h.column.columnDef.header, h.getContext())}
                         {canSort && (
-                          <span className="text-muted-foreground/60">
+                          <span className="text-govuk-dark-grey">
                             {sortDir === "asc" ? (
                               <ArrowUp className="h-3 w-3" />
                             ) : sortDir === "desc" ? (
@@ -195,49 +200,55 @@ export function DataTable<T>({
                           </span>
                         )}
                       </span>
-                    </TableHead>
+                    </th>
                   );
                 })}
-              </TableRow>
+              </tr>
             ))}
-          </TableHeader>
-          <TableBody>
+          </thead>
+          <tbody>
             {table.getRowModel().rows.length === 0 && (
-              <TableRow>
-                <TableCell
+              <tr>
+                <td
                   colSpan={columns.length}
-                  className="py-12 text-center text-sm text-muted-foreground"
+                  className="border-b-[1px] border-govuk-mid-grey py-10 text-center text-sm text-govuk-dark-grey dark:text-govuk-mid-grey"
                 >
                   {emptyMessage}
-                </TableCell>
-              </TableRow>
+                </td>
+              </tr>
             )}
             {table.getRowModel().rows.map((row) => (
-              <TableRow key={row.id} className="align-middle">
+              <tr
+                key={row.id}
+                className="border-b-[1px] border-govuk-mid-grey align-middle"
+              >
                 {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id} className="whitespace-nowrap px-4 py-4">
+                  <td
+                    key={cell.id}
+                    className="whitespace-nowrap px-4 py-3 text-sm text-govuk-black dark:text-govuk-white"
+                  >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
+                  </td>
                 ))}
-              </TableRow>
+              </tr>
             ))}
-          </TableBody>
-        </Table>
+          </tbody>
+        </table>
       </div>
 
       <div className="flex items-center justify-between">
-        <div className="text-xs text-muted-foreground">
+        <div className="text-sm text-govuk-dark-grey dark:text-govuk-mid-grey">
           Page {table.getState().pagination.pageIndex + 1} of{" "}
           {table.getPageCount() || 1}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <Button
             size="sm"
             variant="outline"
             onClick={() => table.previousPage()}
             disabled={!table.getCanPreviousPage()}
           >
-            <ChevronLeft className="h-3.5 w-3.5" /> Prev
+            <ChevronLeft className="h-3.5 w-3.5" /> Previous
           </Button>
           <Button
             size="sm"

@@ -4,6 +4,7 @@ import type {
   AiStatus,
   EnrichedCase,
   RawCase,
+  RequiredAction,
   StatesFile,
   WorkflowState,
 } from "@/types";
@@ -43,11 +44,77 @@ export function getStateColor(stateKey: string): string {
   return STATE_COLORS[stateKey] ?? "slate";
 }
 
-export const AI_STATUS_META: Record<AiStatus, { label: string; color: string }> = {
+type AiStatusMeta = { label: string; color: string };
+
+const AI_STATUS_DEFINITIONS: Record<string, AiStatusMeta> = {
   draft: { label: "Draft", color: "amber" },
   published: { label: "Published", color: "emerald" },
   rejected: { label: "Rejected", color: "red" },
   quarantined: { label: "Quarantined", color: "stone" },
+};
+
+function titleCase(value: string) {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export function getAiStatusMeta(status: AiStatus): AiStatusMeta {
+  return (
+    AI_STATUS_DEFINITIONS[status] ?? {
+      label: titleCase(status),
+      color: "slate",
+    }
+  );
+}
+
+export const AI_STATUS_META = new Proxy(AI_STATUS_DEFINITIONS, {
+  get: (target, prop: string) =>
+    target[prop] ?? { label: titleCase(prop), color: "slate" },
+}) as Record<string, AiStatusMeta>;
+
+const REQUIRED_ACTIONS: Record<string, RequiredAction> = {
+  "CASE-2026-00042": {
+    label: "Evidence outstanding",
+    severity: "info",
+    items: [
+      "Proof of new address (utility bill or tenancy agreement)",
+      "Updated bank details for benefit payment",
+    ],
+  },
+  "CASE-2026-00158": {
+    label: "Evidence outstanding",
+    severity: "warning",
+    items: [
+      "Annual income declaration (2025/26)",
+      "Signed consent form for age-related review (POL-BR-015)",
+    ],
+  },
+  "CASE-2026-00214": {
+    label: "Overdue — escalation required",
+    severity: "critical",
+    items: [
+      "Original evidence request (56+ days overdue)",
+      "Team leader review per framework section 2.6",
+      "Consider interim suspension",
+    ],
+  },
+  "CASE-2026-00231": {
+    label: "Review required",
+    severity: "info",
+    items: [
+      "Review two public objections on file",
+      "Assess applicant's revised noise-mitigation plan",
+    ],
+  },
+  "CASE-2026-00248": {
+    label: "Follow-up required",
+    severity: "warning",
+    items: [
+      "Investigate 6-week incident log gap (autumn 2025)",
+      "Request whistleblower corroboration if available",
+    ],
+  },
 };
 
 const EXPLANATIONS: Record<string, { score: number; explanation: string }> = {
@@ -120,6 +187,7 @@ export function buildEnrichedCases(): EnrichedCase[] {
       explanation:
         override?.explanation ??
         "Framework match not available for this case in the demo dataset.",
+      required_action: REQUIRED_ACTIONS[c.case_id],
     };
   });
 }
