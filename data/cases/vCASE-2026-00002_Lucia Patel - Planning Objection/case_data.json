@@ -1,0 +1,47 @@
+{
+  "case_id": "CASE-2026-00002",
+  "submitted_date": "2025-08-23",
+  "category": "planning_objection",
+  "complaint_thread": "benefit_payment_stopped",
+  "complainant": {
+    "name": "Lucia Patel",
+    "reference": "REF-53538",
+    "date_of_birth": "1982-01-17",
+    "email": "lucia.patel27@yahoo.co.uk",
+    "phone": "07507 883 5764",
+    "address": {
+      "line_1": "183 King's Road",
+      "line_2": "Floor 2",
+      "city": "Newcastle",
+      "postcode": "SA1 9PD"
+    }
+  },
+  "interactions": [
+    {
+      "interaction_number": 1,
+      "date": "2025-08-23",
+      "channel": "phone",
+      "complaint": "My benefits payment didn't arrive this month and I don't know why. I haven't received any letter or notification about a change. I rely on this payment for rent and food. Could someone look into this urgently and let me know what's happened?"
+    },
+    {
+      "interaction_number": 2,
+      "date": "2025-09-06",
+      "channel": "email",
+      "complaint": "Re: CASE-2026-00002. I called and was told my claim had been 'suspended pending review' but nobody told me this was happening. I asked what evidence they needed and the advisor said they'd send a letter \u2014 but I still haven't received anything. It's been three weeks without income."
+    },
+    {
+      "interaction_number": 3,
+      "date": "2025-09-17",
+      "channel": "email",
+      "complaint": "Further to CASE-2026-00002, I finally received the letter asking for bank statements and a utility bill. I posted everything the same day by recorded delivery. That was two weeks ago. My payment still hasn't resumed. I've had to borrow money from family and I'm now behind on rent."
+    }
+  ],
+  "evidence_documents": [
+    "photograph",
+    "medical_certificate"
+  ],
+  "supporting_documents": [
+    "advocate_referral"
+  ],
+  "garbage_documents": []
+}

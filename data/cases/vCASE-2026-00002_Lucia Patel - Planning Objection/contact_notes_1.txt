@@ -1,0 +1,15 @@
+CALL LOG
+========================================
+Date: 2025-08-23
+Contact: Lucia Patel
+Phone: 07507 883 5764
+Interaction: #1
+Duration: 12 minutes
+
+Caller rang regarding existing complaint CASE-2026-00002.
+
+Complainant stated:
+"My benefits payment didn't arrive this month and I don't know why. I haven't received any letter or notification about a change. I rely on this payment for rent and food. Could someone look into this urgently and let me know what's happened?"
+
+Reference on file: REF-53538
+Action taken: Noted on system. Advised complainant of next steps.

@@ -96,11 +96,23 @@ export function CasesProvider({ children }: { children: ReactNode }) {
     setCases((prev) => [c, ...prev]);
   }, []);
 
+  // Quarantine is sourced from whichever column the agent populated: ai_status,
+  // the workflow status, or the derived state. Pending/approved explicitly
+  // exclude quarantined rows so a quarantined case can never double-show.
+  const isQuarantined = (c: EnrichedCase) =>
+    c.ai_status === "quarantined" ||
+    c.status === "quarantined" ||
+    c.state === "quarantined";
+
+  const quarantined = cases.filter(isQuarantined);
   const pending = cases.filter(
-    (c) => c.ai_status === "draft" || c.ai_status === "rejected",
+    (c) =>
+      !isQuarantined(c) &&
+      (c.ai_status === "draft" || c.ai_status === "rejected"),
   );
-  const approved = cases.filter((c) => c.ai_status === "published");
-  const quarantined = cases.filter((c) => c.ai_status === "quarantined");
+  const approved = cases.filter(
+    (c) => !isQuarantined(c) && c.ai_status === "published",
+  );
 
   return (
     <CasesContext.Provider

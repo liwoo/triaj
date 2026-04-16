@@ -12,10 +12,11 @@ Supabase client).
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
-from urllib.parse import urlparse
 
 import anthropic
 from langgraph.types import Command
@@ -74,53 +75,80 @@ def _list_local_folder(path: Path) -> list[ParsedDocument]:
     return docs
 
 
+def _download_supabase_folder(bucket: str, folder: str) -> Path:
+    """Download every file at `{bucket}/{folder}` into a fresh temp dir.
+
+    Uses the shared Supabase client (credentials from SUPABASE_URL /
+    SUPABASE_ANON_KEY). Flat listing only — subfolders are skipped, matching
+    the frontend's upload shape (`uploads-quarantine/{folder}/file.ext`).
+    """
+
+    client = supabase_client._lazy_client()
+    if client is None:
+        raise RuntimeError(
+            "SUPABASE_URL / SUPABASE_ANON_KEY not set — cannot reach Storage"
+        )
+
+    storage = client.storage.from_(bucket)
+    items = storage.list(folder) or []
+    files = [
+        item for item in items if item.get("name") and item.get("id") is not None
+    ]
+    if not files:
+        raise RuntimeError(f"no files found at '{bucket}/{folder}'")
+
+    tmp = Path(tempfile.mkdtemp(prefix="triaj-extract-"))
+    for item in files:
+        name = item["name"]
+        data = storage.download(f"{folder}/{name}")
+        (tmp / name).write_bytes(data)
+    return tmp
+
+
+def _extract_error(message: str) -> CaseState:
+    return {
+        "documents": [],
+        "raw_content": "",
+        "trace": [{"node": "extract", "status": "error", "message": message}],
+    }
+
+
 def extract(state: CaseState) -> CaseState:
     """Parse every file in the case folder with LangChain loaders.
 
-    Supports local paths and `file://` URLs out of the box. Cloud schemes
-    (`s3://`, `gs://`, `supabase://`) are recognised but currently return an
-    error event — swap in the appropriate downloader when the real storage
-    layer is wired up.
+    Pulls from Supabase Storage (`bucket` + `folder`) or from the local
+    filesystem (`local_path`). Exactly one must be set.
     """
 
-    url = (state.get("bucket_url") or "").strip()
-    if not url:
-        return {
-            "documents": [],
-            "raw_content": "",
-            "trace": [
-                {"node": "extract", "status": "error", "message": "bucket_url missing"}
-            ],
-        }
+    local = (state.get("local_path") or "").strip()
+    bucket = (state.get("bucket") or "").strip()
+    folder = (state.get("folder") or "").strip()
 
-    parsed = urlparse(url)
-    if parsed.scheme in ("", "file"):
-        path = Path(parsed.path or url).expanduser().resolve()
+    source: str
+    cleanup: Path | None = None
+
+    if local:
+        path = Path(local).expanduser().resolve()
         if not path.is_dir():
-            return {
-                "documents": [],
-                "raw_content": "",
-                "trace": [
-                    {
-                        "node": "extract",
-                        "status": "error",
-                        "message": f"folder not found: {path}",
-                    }
-                ],
-            }
-        docs = _list_local_folder(path)
+            return _extract_error(f"local folder not found: {path}")
+        source = str(path)
+    elif bucket and folder:
+        try:
+            path = _download_supabase_folder(bucket, folder)
+        except Exception as e:
+            return _extract_error(f"supabase download failed: {e}")
+        source = f"supabase://{bucket}/{folder}"
+        cleanup = path
     else:
-        return {
-            "documents": [],
-            "raw_content": "",
-            "trace": [
-                {
-                    "node": "extract",
-                    "status": "error",
-                    "message": f"bucket scheme '{parsed.scheme}' not implemented — stub a downloader",
-                }
-            ],
-        }
+        return _extract_error(
+            "missing input: set `local_path`, or `bucket` + `folder`"
+        )
+
+    try:
+        docs = _list_local_folder(path)
+    finally:
+        if cleanup is not None:
+            shutil.rmtree(cleanup, ignore_errors=True)
 
     raw = "\n\n".join(d.content for d in docs if d.content)
     return {
@@ -130,7 +158,7 @@ def extract(state: CaseState) -> CaseState:
             {
                 "node": "extract",
                 "status": "ok",
-                "message": f"parsed {len(docs)} file(s), {len(raw)} chars",
+                "message": f"parsed {len(docs)} file(s) from {source}, {len(raw)} chars",
             }
         ],
     }

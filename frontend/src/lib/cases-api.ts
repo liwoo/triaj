@@ -111,6 +111,19 @@ function toRequiredAction(
   };
 }
 
+// ai_status is the bucket the UI sorts on (draft / published / rejected /
+// quarantined). Some agents only write the workflow `status` column and leave
+// `ai_status` null — so coerce obvious quarantine/publish signals here rather
+// than defaulting silently to "draft".
+function inferAiStatus(row: CaseRow): string {
+  if (row.ai_status) return row.ai_status;
+  if (row.status === "quarantined" || row.state === "quarantined") {
+    return "quarantined";
+  }
+  if (row.status === "closed") return "published";
+  return "draft";
+}
+
 function toEnriched(row: CaseRow): EnrichedCase {
   return {
     case_id: row.case_id,
@@ -124,7 +137,7 @@ function toEnriched(row: CaseRow): EnrichedCase {
     last_updated: row.last_updated ?? row.created_date,
     timeline: toTimeline(row.timeline),
     score: row.score ?? 0,
-    ai_status: row.ai_status ?? "draft",
+    ai_status: inferAiStatus(row),
     explanation: row.explanation ?? "",
     rejection_reason: row.rejection_reason ?? undefined,
     required_action: toRequiredAction(row.required_actions),
@@ -190,10 +203,12 @@ export async function fetchQuarantinedCasesFromSupabase(): Promise<
   EnrichedCase[]
 > {
   const supabase = createClient();
+  // Match whichever column the agent wrote to: ai_status OR the workflow
+  // status/state column. Supabase .or() takes a PostgREST filter string.
   const { data, error } = await supabase
     .from("cases")
     .select(CASE_SELECT)
-    .eq("ai_status", "quarantined")
+    .or("ai_status.eq.quarantined,status.eq.quarantined,state.eq.quarantined")
     .order("created_date", { ascending: false });
 
   if (error) throw error;

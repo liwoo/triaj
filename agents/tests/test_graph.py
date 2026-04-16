@@ -61,7 +61,7 @@ def test_processable_folder_runs_full_pipeline(
     )
 
     result = graph_module.graph.invoke(
-        {"case_id": "CASE-INGEST-001", "bucket_url": str(folder)}
+        {"case_id": "CASE-INGEST-001", "local_path": str(folder)}
     )
 
     assert result["is_processable"] is True
@@ -99,7 +99,7 @@ def test_empty_folder_is_quarantined(tmp_path: Path, stub_categorize: None) -> N
     folder.mkdir()
 
     result = graph_module.graph.invoke(
-        {"case_id": "CASE-EMPTY", "bucket_url": str(folder)}
+        {"case_id": "CASE-EMPTY", "local_path": str(folder)}
     )
 
     assert result["is_processable"] is False
@@ -116,11 +116,13 @@ def test_empty_folder_is_quarantined(tmp_path: Path, stub_categorize: None) -> N
     assert notes["reason"] == "No readable content extracted from the bucket folder."
 
 
-def test_missing_bucket_url_quarantines(stub_categorize: None) -> None:
-    result = graph_module.graph.invoke({"case_id": "CASE-NO-URL", "bucket_url": ""})
+def test_missing_input_quarantines(stub_categorize: None) -> None:
+    result = graph_module.graph.invoke({"case_id": "CASE-NO-INPUT"})
 
     assert result["is_processable"] is False
     assert supabase_client.get_writes()[0]["status"] == "quarantined"
+    extract_trace = [t for t in result["trace"] if t["node"] == "extract"]
+    assert "missing input" in extract_trace[0]["message"]
 
 
 def test_policy_folder_persists_directly(
@@ -137,7 +139,7 @@ def test_policy_folder_persists_directly(
     )
 
     result = graph_module.graph.invoke(
-        {"case_id": "POLICY-2026-04", "bucket_url": str(folder), "kind": "policy"}
+        {"case_id": "POLICY-2026-04", "local_path": str(folder), "kind": "policy"}
     )
 
     trace_nodes = [t["node"] for t in result["trace"]]

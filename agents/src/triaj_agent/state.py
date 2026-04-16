@@ -26,7 +26,12 @@ Kind = Literal["case", "policy"]
 class CaseState(TypedDict, total=False):
     """State threaded through the ingestion graph.
 
-    Invoked with `case_id`, `bucket_url`, and `kind` ("case" or "policy").
+    Invoked with `case_id`, `kind` ("case" or "policy"), and *either*:
+    - `bucket` + `folder` → pull from Supabase Storage (uses SUPABASE_URL /
+      SUPABASE_ANON_KEY from env), or
+    - `local_path` → read from the local filesystem (dev/test escape hatch).
+
+    Flow:
     - kind="case"   → extract → validate → (quarantine | pii_filter → categorize → persist)
     - kind="policy" → extract → persist
 
@@ -36,8 +41,10 @@ class CaseState(TypedDict, total=False):
 
     # ---- input ----
     case_id: str
-    bucket_url: str
     kind: Kind
+    bucket: str        # Supabase Storage bucket name (e.g. "uploads-quarantine")
+    folder: str        # prefix inside the bucket
+    local_path: str    # alternative: a local filesystem path
 
     # ---- extract ----
     documents: list[ParsedDocument]
