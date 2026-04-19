@@ -11,7 +11,7 @@ export function GovPhaseBanner({
 }: GovPhaseBannerProps) {
   return (
     <div className="border-b border-govuk-mid-grey bg-govuk-white dark:bg-govuk-black">
-      <div className="govuk-width py-2.5">
+      <div className="govuk-width-narrow py-2.5">
         <p className="flex items-center gap-3 text-sm text-govuk-black dark:text-govuk-white">
           <strong className="inline-flex items-center bg-govuk-blue px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-govuk-white">
             {phase}

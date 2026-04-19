@@ -53,6 +53,8 @@ interface DataTableProps<T> {
   columnFilters?: ColumnFilterConfig[];
   pageSize?: number;
   emptyMessage?: string;
+  rowClassName?: (row: T) => string | undefined;
+  initialSort?: SortingState;
 }
 
 const ALL_VALUE = "__all__";
@@ -91,8 +93,12 @@ export function DataTable<T>({
   columnFilters = [],
   pageSize = 10,
   emptyMessage = "No rows to display.",
+  rowClassName,
+  initialSort,
 }: DataTableProps<T>) {
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const [sorting, setSorting] = useState<SortingState>(
+    initialSort ?? [{ id: "last_updated", desc: true }],
+  );
   const [filters, setFilters] = useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
 
@@ -259,7 +265,10 @@ export function DataTable<T>({
             {table.getRowModel().rows.map((row) => (
               <tr
                 key={row.id}
-                className="group/row border-b-[1px] border-govuk-mid-grey align-middle"
+                className={cn(
+                  "group/row border-b-[1px] border-govuk-mid-grey align-middle",
+                  rowClassName?.(row.original),
+                )}
               >
                 {row.getVisibleCells().map((cell) => {
                   const stickyRight =

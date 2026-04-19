@@ -63,6 +63,11 @@ export function CasesPendingPage() {
         data={pending}
         columns={columns}
         searchPlaceholder="Search by case ID, applicant, reference, notes…"
+        rowClassName={(row) =>
+          row.status === "processing" || row.state === "processing"
+            ? "row-processing"
+            : undefined
+        }
         columnFilters={[
           {
             columnId: "case_type",

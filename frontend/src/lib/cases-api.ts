@@ -1,5 +1,6 @@
 import type { EnrichedCase, RequiredAction, TimelineEvent } from "@/types";
 import { createClient } from "@/lib/supabase/client";
+import { BUCKET_QUARANTINE } from "@/lib/buckets";
 
 type ApplicantRow = {
   name: string | null;
@@ -33,6 +34,8 @@ type CaseRow = {
   rejection_reason: string | null;
   assigned_to: string | null;
   case_notes: string | null;
+  storage_bucket: string | null;
+  folder_name: string | null;
   created_date: string;
   last_updated: string | null;
   applicant: ApplicantRow | ApplicantRow[] | null;
@@ -52,6 +55,8 @@ const CASE_SELECT = `
   rejection_reason,
   assigned_to,
   case_notes,
+  storage_bucket,
+  folder_name,
   created_date,
   last_updated,
   applicant:applicants (
@@ -121,7 +126,50 @@ function inferAiStatus(row: CaseRow): string {
     return "quarantined";
   }
   if (row.status === "closed") return "published";
+  // If the agent wrote a score or explanation, it has been processed — treat as
+  // draft (awaiting human review), not "processing".
+  if (row.score != null && row.score > 0) return "draft";
+  if (row.explanation) return "draft";
+  // Still in the pipeline
+  if (row.status === "processing" || row.state === "processing") {
+    return "processing";
+  }
   return "draft";
+}
+
+// Supabase bucket names use hyphens, but the DB column sometimes stores
+// underscores (e.g. "uploads_verified" → "uploads-verified"). Normalise.
+function normaliseBucketName(name: string): string {
+  return name.replace(/_/g, "-");
+}
+
+// Resolve storage location from explicit DB columns, falling back to parsing
+// case_notes. Never assumes a specific bucket name — reads whatever the DB
+// or notes contain.
+function inferStorage(row: CaseRow): { bucket?: string; folder?: string } {
+  if (row.storage_bucket && row.folder_name) {
+    return {
+      bucket: normaliseBucketName(row.storage_bucket),
+      folder: row.folder_name,
+    };
+  }
+  if (row.storage_bucket) {
+    return { bucket: normaliseBucketName(row.storage_bucket) };
+  }
+  if (row.folder_name) {
+    // folder_name without a bucket — DocumentsTab will discover the bucket
+    // from the DB at query time rather than us guessing here.
+    return { folder: row.folder_name };
+  }
+  // Last resort: try to extract a bucket/folder pair from case_notes.
+  // Matches patterns like "Uploaded to some-bucket/some-folder".
+  if (row.case_notes) {
+    const m = row.case_notes.match(/(?:to|in)\s+([\w-]+)\/([\w][^\s"]*)/i);
+    if (m) {
+      return { bucket: normaliseBucketName(m[1]), folder: m[2] };
+    }
+  }
+  return {};
 }
 
 function toEnriched(row: CaseRow): EnrichedCase {
@@ -141,6 +189,13 @@ function toEnriched(row: CaseRow): EnrichedCase {
     explanation: row.explanation ?? "",
     rejection_reason: row.rejection_reason ?? undefined,
     required_action: toRequiredAction(row.required_actions),
+    ...(() => {
+      const s = inferStorage(row);
+      return {
+        storage_bucket: s.bucket,
+        folder_name: s.folder,
+      };
+    })(),
   };
 }
 
@@ -234,7 +289,7 @@ export async function createCaseInSupabase(params: {
   }
 
   const notes = params.uploadedFolder
-    ? `Uploaded to uploads-quarantine/${params.uploadedFolder}`
+    ? `Uploaded to ${BUCKET_QUARANTINE}/${params.uploadedFolder}`
     : "";
 
   const { error: caseErr } = await supabase.from("cases").insert({
@@ -245,6 +300,8 @@ export async function createCaseInSupabase(params: {
     applicant_id: applicant.id,
     assigned_to: "unassigned",
     case_notes: notes,
+    storage_bucket: params.uploadedFolder ? BUCKET_QUARANTINE : null,
+    folder_name: params.uploadedFolder ?? null,
     created_date: params.createdDate,
   });
 
@@ -253,29 +310,37 @@ export async function createCaseInSupabase(params: {
   }
 }
 
+function sortCases(cases: EnrichedCase[]): EnrichedCase[] {
+  return cases.sort((a, b) => {
+    const aProc = a.status === "processing" || a.state === "processing" ? 0 : 1;
+    const bProc = b.status === "processing" || b.state === "processing" ? 0 : 1;
+    if (aProc !== bProc) return aProc - bProc;
+    if (aProc === 0) {
+      return (b.created_date ?? "").localeCompare(a.created_date ?? "");
+    }
+    return (b.last_updated ?? "").localeCompare(a.last_updated ?? "");
+  });
+}
+
 export async function fetchCasesFromSupabase(): Promise<EnrichedCase[]> {
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("cases")
-    .select(CASE_SELECT)
-    .order("created_date", { ascending: false });
+  const { data, error } = await supabase.from("cases").select(CASE_SELECT);
 
   if (error) throw error;
-  return (data as unknown as CaseRow[] | null)?.map(toEnriched) ?? [];
+  const cases = (data as unknown as CaseRow[] | null)?.map(toEnriched) ?? [];
+  return sortCases(cases);
 }
 
 export async function fetchQuarantinedCasesFromSupabase(): Promise<
   EnrichedCase[]
 > {
   const supabase = createClient();
-  // Match whichever column the agent wrote to: ai_status OR the workflow
-  // status/state column. Supabase .or() takes a PostgREST filter string.
   const { data, error } = await supabase
     .from("cases")
     .select(CASE_SELECT)
-    .or("ai_status.eq.quarantined,status.eq.quarantined,state.eq.quarantined")
-    .order("created_date", { ascending: false });
+    .or("ai_status.eq.quarantined,status.eq.quarantined,state.eq.quarantined");
 
   if (error) throw error;
-  return (data as unknown as CaseRow[] | null)?.map(toEnriched) ?? [];
+  const cases = (data as unknown as CaseRow[] | null)?.map(toEnriched) ?? [];
+  return sortCases(cases);
 }

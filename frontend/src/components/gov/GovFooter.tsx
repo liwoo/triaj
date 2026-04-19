@@ -28,7 +28,7 @@ function OGLCrown() {
 export function GovFooter() {
   return (
     <footer className="mt-auto border-t-[1px] border-govuk-mid-grey bg-govuk-light-grey pt-10 text-govuk-black dark:border-white/10 dark:bg-[#1a1a1a] dark:text-govuk-white">
-      <div className="govuk-width pb-6">
+      <div className="govuk-width-narrow pb-6">
         <nav aria-label="Support links" className="mb-8">
           <ul className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
             {LINKS.map((l) => (

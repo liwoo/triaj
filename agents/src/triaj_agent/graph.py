@@ -17,6 +17,12 @@ Exposed as `graph` so that:
     - `langgraph dev` picks it up via langgraph.json
     - `from triaj_agent import graph` works for direct invocation
     - LangSmith tracing kicks in when LANGSMITH_TRACING=true
+
+`categorize` reviews one policy per invocation. `categorize_router` loops
+back to `categorize` while `policy_queue` has items, then falls through to
+`persist`, so the full flow is:
+
+    ... → pii_filter → categorize ⇄ categorize_router → persist → END
 """
 
 from __future__ import annotations
@@ -34,6 +40,7 @@ def build_graph() -> StateGraph:
     workflow = StateGraph(CaseState)
 
     workflow.add_node("classify_upload", nodes.classify_upload)
+    workflow.add_node("fetch_case", nodes.fetch_case)
     workflow.add_node("extract", nodes.extract)
     workflow.add_node("classify_ingestion_path", nodes.classify_ingestion_path)
     workflow.add_node("validate", nodes.validate)
@@ -41,16 +48,20 @@ def build_graph() -> StateGraph:
     workflow.add_node("quarantine", nodes.quarantine)
     workflow.add_node("pii_filter", nodes.pii_filter)
     workflow.add_node("categorize", nodes.categorize)
+    workflow.add_node("categorize_router", nodes.categorize_router)
     workflow.add_node("persist", nodes.persist)
 
     workflow.add_edge(START, "classify_upload")
-    workflow.add_edge("classify_upload", "extract")
+    workflow.add_edge("classify_upload", "fetch_case")
+    workflow.add_edge("fetch_case", "extract")
     workflow.add_edge("extract", "classify_ingestion_path")
     # classify_ingestion_path returns Command(goto=validate|persist)
     workflow.add_edge("validate", "triage_decision")
     # triage_decision returns Command(goto=pii_filter|quarantine)
     workflow.add_edge("pii_filter", "categorize")
-    workflow.add_edge("categorize", "persist")
+    workflow.add_edge("categorize", "categorize_router")
+    # categorize_router returns Command(goto=categorize|persist) — the loop
+    # runs until policy_queue is empty, then falls through to persist.
     workflow.add_edge("quarantine", END)
     workflow.add_edge("persist", END)
 

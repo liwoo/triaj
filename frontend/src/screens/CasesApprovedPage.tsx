@@ -32,6 +32,11 @@ export function CasesApprovedPage() {
         data={approved}
         columns={columns}
         searchPlaceholder="Search approved cases…"
+        rowClassName={(row) =>
+          row.status === "processing" || row.state === "processing"
+            ? "row-processing"
+            : undefined
+        }
         columnFilters={[
           {
             columnId: "case_type",

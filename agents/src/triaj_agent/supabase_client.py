@@ -106,6 +106,31 @@ def _case_row(fields: dict[str, Any]) -> dict[str, Any]:
     return row
 
 
+def get_case(case_id: str) -> dict[str, Any] | None:
+    """Fetch a case row by `case_id`, or `None` if unavailable.
+
+    Reads `case_type`, `storage_bucket`, and `folder_name` so `fetch_case`
+    can locate the dossier in Supabase Storage. Returns `None` when
+    Supabase isn't configured or the row doesn't exist.
+    """
+
+    client = _lazy_client()
+    if client is None:
+        return None
+    try:
+        res = (
+            client.table("cases")
+            .select("case_type,storage_bucket,folder_name")
+            .eq("case_id", case_id)
+            .single()
+            .execute()
+        )
+    except Exception as e:
+        log.warning("supabase.cases get '%s' failed: %s", case_id, e)
+        return None
+    return res.data or None
+
+
 def update_case(case_id: str, **fields: Any) -> dict[str, Any]:
     """Update a row in `cases` keyed by `case_id`.
 

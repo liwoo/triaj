@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { GovCrown } from "@/components/gov/GovCrown";
 import { ModeToggle } from "@/components/ModeToggle";
 import { useCreateDialog } from "@/store/create-dialog";
 import { cn } from "@/lib/utils";
@@ -14,7 +13,6 @@ const NAV: NavItem[] = [
   { href: "/cases/pending", label: "Pending", matchPrefix: true },
   { href: "/cases/quarantined", label: "Quarantined" },
   { href: "/cases/approved", label: "Approved" },
-  { href: "/policies", label: "Policies" },
   { href: "/settings", label: "Settings" },
 ];
 
@@ -37,15 +35,12 @@ export function GovHeader() {
     <header className="border-b-[10px] border-govuk-blue bg-govuk-black text-govuk-white">
       {/* Crown row */}
       <div className="border-b border-white/10">
-        <div className="govuk-width flex items-center justify-between py-2">
+        <div className="govuk-width-narrow flex items-center justify-between py-2">
           <Link
             href="/dashboard"
-            className="inline-flex items-center gap-2 text-govuk-white no-underline hover:underline"
+            className="text-[30px] font-bold leading-none tracking-tight text-govuk-white no-underline hover:underline"
           >
-            <GovCrown className="h-[30px] w-[36px] text-govuk-white" />
-            <span className="text-[30px] font-bold leading-none tracking-tight">
-              GOV.UK
-            </span>
+            GOV.UK
           </Link>
           <div className="flex items-center gap-2">
             <ModeToggle />
@@ -55,7 +50,7 @@ export function GovHeader() {
 
       {/* Service name + global actions */}
       <div>
-        <div className="govuk-width flex flex-wrap items-center justify-between gap-3 py-3">
+        <div className="govuk-width-narrow flex flex-wrap items-center justify-between gap-3 py-3">
           <Link
             href="/dashboard"
             className="text-[24px] font-bold leading-tight text-govuk-white no-underline hover:underline"
@@ -74,7 +69,7 @@ export function GovHeader() {
 
       {/* Primary nav */}
       <nav aria-label="Service" className="bg-govuk-black">
-        <div className="govuk-width">
+        <div className="govuk-width-narrow">
           <ul className="flex flex-wrap gap-x-6 gap-y-1 border-t border-white/10 py-2 text-base">
             {NAV.map((item) => {
               const active = isActive(pathname, item);

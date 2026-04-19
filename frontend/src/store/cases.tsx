@@ -129,7 +129,9 @@ export function CasesProvider({ children }: { children: ReactNode }) {
   const pending = cases.filter(
     (c) =>
       !isQuarantined(c) &&
-      (c.ai_status === "draft" || c.ai_status === "rejected"),
+      (c.ai_status === "draft" ||
+        c.ai_status === "rejected" ||
+        c.ai_status === "processing"),
   );
   const approved = cases.filter(
     (c) => !isQuarantined(c) && c.ai_status === "published",

@@ -1,8 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-
-const BUCKET = "uploads-quarantine";
+import { BUCKET_QUARANTINE } from "@/lib/buckets";
 
 export type UploadOutcome = {
   folder: string;
@@ -60,7 +59,7 @@ export async function uploadQuarantineFolder(params: {
   const tasks: Promise<void>[] = realFiles.map(async (file) => {
     const safeFileName = file.name.replace(/[/\\]/g, "_");
     const path = `${folder}/${safeFileName}`;
-    const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+    const { error } = await supabase.storage.from(BUCKET_QUARANTINE).upload(path, file, {
       contentType: file.type || "application/octet-stream",
       upsert: false,
     });
@@ -77,7 +76,7 @@ export async function uploadQuarantineFolder(params: {
         });
         const path = `${folder}/case_data.json`;
         const { error } = await supabase.storage
-          .from(BUCKET)
+          .from(BUCKET_QUARANTINE)
           .upload(path, blob, {
             contentType: "application/json",
             upsert: true,

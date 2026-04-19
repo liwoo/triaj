@@ -285,12 +285,24 @@ export function buildCaseColumns({
     {
       accessorKey: "case_id",
       header: "Case ID",
-      cell: (info) => (
-        <CaseIdCell
-          caseId={info.getValue() as string}
-          onView={() => onView(info.row.original)}
-        />
-      ),
+      cell: (info) => {
+        const c = info.row.original;
+        const humanReviewed =
+          c.ai_status === "published" || c.ai_status === "rejected";
+        return (
+          <span className="inline-flex items-center gap-1.5">
+            {!humanReviewed && (
+              <span title="Pending human review" className="text-sm leading-none">
+                🤖
+              </span>
+            )}
+            <CaseIdCell
+              caseId={info.getValue() as string}
+              onView={() => onView(c)}
+            />
+          </span>
+        );
+      },
     },
     {
       id: "applicant",

@@ -37,6 +37,10 @@ export type EnrichedCase = RawCase & {
   explanation: string;
   rejection_reason?: string;
   required_action?: RequiredAction;
+  /** Supabase storage bucket name */
+  storage_bucket?: string;
+  /** Folder name inside the bucket */
+  folder_name?: string;
 };
 
 export type WorkflowState = {

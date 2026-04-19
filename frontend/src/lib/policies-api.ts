@@ -1,8 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-
-const BUCKET = "policy-documents";
+import { BUCKET_POLICIES } from "@/lib/buckets";
 
 export type PolicyDocument = {
   name: string;
@@ -34,7 +33,7 @@ type StorageObject = {
  */
 async function walk(prefix: string): Promise<StorageObject[]> {
   const supabase = createClient();
-  const { data, error } = await supabase.storage.from(BUCKET).list(prefix, {
+  const { data, error } = await supabase.storage.from(BUCKET_POLICIES).list(prefix, {
     limit: 1000,
     sortBy: { column: "name", order: "asc" },
   });
@@ -63,7 +62,7 @@ export async function fetchPoliciesFromSupabase(): Promise<PolicyDocument[]> {
   return objects
     .filter((o) => o.id !== null)
     .map((o): PolicyDocument => {
-      const { data } = supabase.storage.from(BUCKET).getPublicUrl(o.name);
+      const { data } = supabase.storage.from(BUCKET_POLICIES).getPublicUrl(o.name);
       return {
         name: o.name,
         path: o.name,

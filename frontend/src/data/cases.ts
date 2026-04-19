@@ -51,6 +51,7 @@ const AI_STATUS_DEFINITIONS: Record<string, AiStatusMeta> = {
   published: { label: "Published", color: "emerald" },
   rejected: { label: "Rejected", color: "red" },
   quarantined: { label: "Quarantined", color: "stone" },
+  processing: { label: "Processing", color: "sky" },
 };
 
 function titleCase(value: string) {

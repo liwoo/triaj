@@ -29,6 +29,11 @@ export function CasesQuarantinedPage() {
         data={quarantined}
         columns={columns}
         searchPlaceholder="Search quarantined cases…"
+        rowClassName={(row) =>
+          row.status === "processing" || row.state === "processing"
+            ? "row-processing"
+            : undefined
+        }
         emptyMessage="No cases currently quarantined."
       />
 

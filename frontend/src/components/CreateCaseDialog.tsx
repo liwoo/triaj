@@ -18,6 +18,7 @@ import { useCases } from "@/store/cases";
 import { useCreateDialog } from "@/store/create-dialog";
 import { supabaseEnabled } from "@/lib/supabase/client";
 import { uploadQuarantineFolder } from "@/lib/storage";
+import { BUCKET_QUARANTINE } from "@/lib/buckets";
 import { createCaseInSupabase } from "@/lib/cases-api";
 import { extractFilesFromDrop } from "@/lib/file-drop";
 import type { EnrichedCase } from "@/types";
@@ -171,7 +172,7 @@ export function CreateCaseDialog() {
           note: `Folder uploaded via create dialog (${files.length} file${files.length === 1 ? "" : "s"}).`,
         },
       ],
-      case_notes: `Uploaded to uploads-quarantine/${folder}`,
+      case_notes: `Uploaded to ${BUCKET_QUARANTINE}/${folder}`,
       state: "processing",
       score: 0,
       ai_status: "draft",
@@ -215,7 +216,7 @@ export function CreateCaseDialog() {
                 </p>
                 {uploadedFolder && (
                   <p className="mt-1 break-all font-mono text-[11px] text-emerald-800/80 dark:text-emerald-200/80">
-                    uploads-quarantine/{uploadedFolder}/
+                    {BUCKET_QUARANTINE}/{uploadedFolder}/
                   </p>
                 )}
               </div>
@@ -248,7 +249,7 @@ export function CreateCaseDialog() {
             </div>
             {phase === "uploading" && files.length > 0 && (
               <p className="break-all font-mono text-[11px] text-muted-foreground">
-                → uploads-quarantine/
+                → {BUCKET_QUARANTINE}/
               </p>
             )}
           </div>
