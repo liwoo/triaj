@@ -335,8 +335,15 @@ export function buildCaseColumns({
       cell: (info) => {
         const c = info.row.original;
         const meta = getWorkflowState(c.case_type, c.state);
+        const humanReviewed =
+          c.ai_status === "published" || c.ai_status === "rejected";
         return (
           <span className="inline-flex items-center gap-1.5">
+            {!humanReviewed && (
+              <span className="inline-flex items-center rounded bg-indigo-100 px-1 py-0.5 text-[9px] font-bold uppercase leading-none tracking-wide text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                AI
+              </span>
+            )}
             <Badge
               variant="outline"
               className={cn(badgeColor(getStateColor(c.state)), "border")}
